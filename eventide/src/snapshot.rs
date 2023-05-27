@@ -24,7 +24,7 @@ impl Snapshot {
         })
     }
 
-    pub fn deserialize<T>(&self) -> Result<T, EventStoreError>
+    pub fn to_state<T>(&self) -> Result<T, EventStoreError>
         where T: Serialize + DeserializeOwned
     {
         serde_json::from_str(&self.data).map_err(EventStoreError::SnapshotDeserializationError)
@@ -69,7 +69,7 @@ mod tests {
 
         let snapshot = super::Snapshot::new(1, "test", 1, &state).unwrap();
 
-        let deserialized: SampleState = snapshot.deserialize().unwrap();
+        let deserialized: SampleState = snapshot.to_state().unwrap();
 
         assert_eq!(deserialized.value, 1);
         assert_eq!(deserialized.name, "test");

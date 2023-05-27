@@ -1,12 +1,12 @@
 /// EventStore is a library for storing and retrieving events from an event store.
-///
 pub mod event;
 pub mod memory;
 pub mod snapshot;
 
-use std::sync::Arc;
+use std::{sync::Arc,cell::RefCell};
 
 use event::Event;
+use serde::de::DeserializeOwned;
 use snapshot::Snapshot;
 use thiserror::Error;
 
@@ -18,14 +18,13 @@ type CtxTypedClosure<T> = fn(&EventContext) -> Result<T, Box<dyn std::error::Err
 
 
 /// Aggregate is a trait that must be implemented by any aggregate that is to be stored in the event store.
-trait Aggregate {
+pub trait Aggregate<'a> {
     fn get_id(&self) -> u64;
-    fn set_context(&mut self, context: &EventContext);
     fn get_type(&self) -> &str;
     fn get_version(&self) -> u64;
     fn apply_snapshot(&mut self, snapshot: &Snapshot) -> Result<(), EventStoreError>;
     fn apply_event(&mut self, event: &Event) -> Result<(), EventStoreError>;
-    fn get_snapshot(&self) -> Result<Option<Snapshot>, EventStoreError>;
+    fn get_snapshot(&self) -> Result<Snapshot, EventStoreError>;
 }
 
 
@@ -63,11 +62,11 @@ impl EventStore {
         EventStore { storage_engine }
     }
 
-    async fn next_aggregate_id(&self) -> Result<u64, EventStoreError> {
+    pub async fn next_aggregate_id(&self) -> Result<u64, EventStoreError> {
         self.storage_engine.next_aggregate_id().await 
     }
 
-    async fn get_events(
+    pub async fn get_events(
         &self,
         aggregate_id: u64,
         aggregate_type: &str,
@@ -75,61 +74,80 @@ impl EventStore {
     ) -> Result<Vec<Event>, EventStoreError> {
         self.storage_engine.get_events(aggregate_id, aggregate_type, version).await
     }
-    async fn get_snapshot(
+
+    pub async fn get_snapshot(
         &self,
         aggregate_id: u64,
         aggregate_type: &str,
     ) -> Result<Option<Snapshot>, EventStoreError> {
         self.storage_engine.get_snapshot(aggregate_id, aggregate_type).await
     }
-    async fn save_events(&self, events: &Vec<Event>) -> Result<(), EventStoreError> {
+
+    pub async fn save_events(&self, events: &Vec<Event>) -> Result<(), EventStoreError> {
         self.storage_engine.save_events(events).await
     }
 
-    async fn save_snapshot(&self, snapshot: Snapshot) -> Result<(), EventStoreError> {
+    pub async fn save_snapshot(&self, snapshot: Snapshot) -> Result<(), EventStoreError> {
         self.storage_engine.save_snapshot(snapshot).await
     }
 
-    async fn with_context_returns<T>(&self, ctx_fn: CtxTypedClosure<T>) -> Result<T, EventStoreError>
+    pub async fn with_context_returns<T, Fut>(&self, ctx_fn: impl FnOnce(&EventContext) -> Fut) -> Result<T, EventStoreError>
+    where
+        Fut: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>>
      {
         let ctx = EventContext::new(self);
-        let result = ctx_fn(&ctx).map_err(EventStoreError::ContextError);
-        let events = &ctx.captured_events;   
+        let result = ctx_fn(&ctx).await.map_err(EventStoreError::ContextError);
+        let events = &ctx.captured_events.borrow();   
         self.save_events(events).await?;
         return result;
     }
 
-    async fn with_context(&self, ctx_fn: CtxClosure) -> Result<(), EventStoreError>
+    pub fn get_context<'a>(&'a self) -> EventContext<'a> {
+        EventContext::new(self)
+    }
+
+    /*
+    pub async fn with_context<'a, Fut>(&self, ctx_fn: impl FnOnce(&EventContext) -> Fut) -> Result<(), EventStoreError>
+    where
+        Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error>>> + a
      {
         let ctx = EventContext::new(self);
-        let _ = ctx_fn(&ctx).map_err(EventStoreError::ContextError);
-        let events = &ctx.captured_events;   
+        {
+            ctx_fn(&ctx).await.map_err(EventStoreError::ContextError)?;
+        }
+        let events = &ctx.captured_events.borrow();   
         self.save_events(events).await
     }
+        */
+
 }
 
 /// EventContext is a struct that is passed to the aggregate when an event is published.
-struct EventContext<'a> {
+pub struct EventContext<'a> {
     event_store: &'a EventStore,
-    captured_events: Vec<Event>,
+    captured_events: RefCell<Vec<Event>>,
 }
 
 impl EventContext<'_>  {
     fn new<'a>(event_store: &'a EventStore) -> EventContext {
         EventContext {
             event_store,
-            captured_events: Vec::new(),
+            captured_events: RefCell::new(Vec::new()),
         }
     }
 
+    pub async fn next_aggregate_id(&self) -> Result<u64, EventStoreError> {
+        self.event_store.next_aggregate_id().await
+    }
+
     pub fn publish<T>(
-        &mut self,
+        &self,
         source: &mut dyn Aggregate,
         event_type: &str,
         data: &T,
     ) -> Result<(), EventStoreError>
     where
-        T: serde::Serialize + for<'de> serde::Deserialize<'de>,
+        T: serde::Serialize + DeserializeOwned
     {
         let event = Event::new(
             source.get_id(),
@@ -141,7 +159,7 @@ impl EventContext<'_>  {
 
         source.apply_event(&event)?;
 
-        self.captured_events.push(event);
+        self.captured_events.borrow_mut().push(event);
         return Ok(());
     }
 
@@ -185,7 +203,9 @@ pub enum EventStoreError {
 
     #[error("Error during context callback.")]
     ContextError(Box<dyn std::error::Error>),
-
+    
+    #[error("Unexpected error during context callback.")]
+    ContextError2(String),
 }
 
 #[cfg(test)]
