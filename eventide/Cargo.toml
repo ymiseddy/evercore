@@ -1,0 +1,13 @@
+[package]
+name = "eventide"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.68"
+serde = {version="1.0.163", features=["derive"]}
+serde_json = "1.0.96"
+thiserror = "1.0.40"
+tokio = {version="1.28.1" , features=["rt", "macros"]}
