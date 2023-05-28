@@ -12,7 +12,6 @@ use std::sync::Arc;
 use event::Event;
 use snapshot::Snapshot;
 use thiserror::Error;
-use aggregate::Aggregate;
 
 
 /// EventStorageEnging is a trait that must be implemented by any storage engine that is to be used by the event store.
