@@ -5,6 +5,7 @@ use crate::{ EventStoreError, event::Event, snapshot::Snapshot, EventStoreStorag
 
 type DynMemoryStore = Arc<Mutex<MemoryStore>>;
 
+#[derive(Default)]
 pub struct MemoryStore {
     id: u64, 
     events: Vec<Event>,
@@ -35,6 +36,12 @@ impl MemoryStorageEngine {
         MemoryStorageEngine {
             memory_store: Arc::new(Mutex::new(MemoryStore::new())), 
         }
+    }
+}
+
+impl Default for MemoryStorageEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

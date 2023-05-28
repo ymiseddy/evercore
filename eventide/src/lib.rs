@@ -78,7 +78,7 @@ impl EventStore {
     }
 
     pub fn get_context(self: Arc<EventStore>) -> Arc<EventContext> {
-        Arc::new(EventContext::new(self.clone()))
+        Arc::new(EventContext::new(self))
     }
 }
 
