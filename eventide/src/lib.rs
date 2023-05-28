@@ -68,7 +68,7 @@ impl EventStore {
         self.storage_engine.get_snapshot(aggregate_id, aggregate_type).await
     }
 
-    pub async fn save_events(&self, events: &Vec<Event>) -> Result<(), EventStoreError> {
+    pub async fn save_events(&self, events: &[Event]) -> Result<(), EventStoreError> {
         self.storage_engine.save_events(events).await
     }
 
