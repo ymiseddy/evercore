@@ -77,7 +77,7 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
         Ok(None)
     }
 
-    async fn save_events(&self, events: &Vec<Event>) -> Result<(), EventStoreError> {
+    async fn save_events(&self, events: &[Event]) -> Result<(), EventStoreError> {
         let mut memory_store = self.memory_store.lock().unwrap();
         for event in events {
             memory_store.events.push(event.clone());

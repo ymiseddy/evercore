@@ -30,7 +30,7 @@ pub trait EventStoreStorageEngine {
         aggregate_id: u64,
         aggregate_type: &str,
     ) -> Result<Option<Snapshot>, EventStoreError>;
-    async fn save_events(&self, events: &Vec<Event>) -> Result<(), EventStoreError>;
+    async fn save_events(&self, events: &[Event]) -> Result<(), EventStoreError>;
     async fn save_snapshot(&self, snapshot: Snapshot) -> Result<(), EventStoreError>;
 }
 
