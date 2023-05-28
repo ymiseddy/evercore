@@ -18,15 +18,9 @@ enum AccountError {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct AccountState {
     balance: u32,
-}
-
-impl Default for AccountState {
-    fn default() -> Self {
-        AccountState { balance: 0 }
-    }
 }
 
 struct Account<'a> {
