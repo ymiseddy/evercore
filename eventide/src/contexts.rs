@@ -65,7 +65,7 @@ impl<'a> EventContext<'a> {
         source.apply_event(&event)?;
 
         self.captured_events.borrow_mut().push(event);
-        return Ok(());
+        Ok(())
     }
 
     pub async fn commit(&self) -> Result<(), EventStoreError> {
