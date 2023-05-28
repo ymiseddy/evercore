@@ -3,7 +3,7 @@ use serde::de::DeserializeOwned;
 use crate::EventStoreError;
 
 /// Event is a representation of a change in the aggregate state.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Event {
     pub aggregate_id: u64,
     pub aggregate_type: String,

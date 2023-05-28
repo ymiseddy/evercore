@@ -2,7 +2,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use crate::EventStoreError;
 
 /// Snapshot is a representation of the aggregate state at a given point in time.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Snapshot {
     pub aggregate_id: u64,
     pub aggregate_type: String,
