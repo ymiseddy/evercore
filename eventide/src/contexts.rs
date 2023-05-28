@@ -4,13 +4,13 @@ use crate::{EventStore, event::Event, EventStoreError, aggregate::Aggregate};
 
 
 /// EventContext is a struct that is passed to the aggregate when an event is published.
-pub struct EventContext<'a> {
-    event_store: Arc<&'a EventStore>,
+pub struct EventContext {
+    event_store: Arc<EventStore>,
     captured_events: RefCell<Vec<Event>>,
 }
 
-impl<'a> EventContext<'a> {
-    pub fn new(event_store: Arc<&'a EventStore>) -> EventContext {
+impl<'a> EventContext {
+    pub fn new(event_store: Arc<EventStore>) -> EventContext {
         EventContext {
             event_store,
             captured_events: RefCell::new(Vec::new()),

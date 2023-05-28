@@ -37,17 +37,17 @@ where
 
 /// StructBackedAggregate is a generic implementation of an aggregate that is backed by a struct.
 /// This saves having to implement the boilerplate code for each aggregate.
-pub struct StructBackedAggregate<'a, T>
+pub struct StructBackedAggregate<T>
 where 
     T: DeserializeOwned + Default + Serialize + StructAggregateImpl
 {
     id: u64,
     version: u64,
-    context: Option<Arc<EventContext<'a>>>,
+    context: Option<Arc<EventContext>>,
     state: T,
 }
 
-impl<'a, T> Aggregate<'a> for StructBackedAggregate<'a, T>
+impl<'a, T> Aggregate<'a> for StructBackedAggregate<T>
     where T: DeserializeOwned + Default + Serialize + StructAggregateImpl + Clone
 {
 
@@ -92,14 +92,14 @@ impl<'a, T> Aggregate<'a> for StructBackedAggregate<'a, T>
     }
 }
 
-impl<'a, T> StructBackedAggregate<'a, T> 
+impl<'a, T> StructBackedAggregate<T> 
     where 
         T: 'a +  DeserializeOwned + Default + Serialize + StructAggregateImpl + Clone, 
         Self: Aggregate<'a>
 
 
 {
-    pub async fn new(ctx: Arc<EventContext<'a>>) -> Result<StructBackedAggregate<T>, EventStoreError> 
+    pub async fn new(ctx: Arc<EventContext>) -> Result<StructBackedAggregate<T>, EventStoreError> 
     {
         Ok(StructBackedAggregate {
             id: ctx.next_aggregate_id().await?,
@@ -126,7 +126,7 @@ impl<'a, T> StructBackedAggregate<'a, T>
         Ok(())
     }
 
-    pub async fn load(ctx: Arc<EventContext<'a>>, id: u64) -> Result<StructBackedAggregate<T>, EventStoreError>     {
+    pub async fn load(ctx: Arc<EventContext>, id: u64) -> Result<StructBackedAggregate<T>, EventStoreError>     {
         let mut state_aggregate = StructBackedAggregate{
             id,
             version: 0,

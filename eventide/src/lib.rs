@@ -35,6 +35,7 @@ pub trait EventStoreStorageEngine {
 }
 
 /// EventStore is the main struct for the event store.
+#[derive(Clone)]
 pub struct EventStore {
     storage_engine: Arc<dyn EventStoreStorageEngine>,
 }
@@ -76,10 +77,9 @@ impl EventStore {
         self.storage_engine.save_snapshot(snapshot).await
     }
 
-    pub fn get_context(&self) -> Arc<EventContext> {
-        Arc::new(EventContext::new(Arc::new(self)))
+    pub fn get_context(self: Arc<EventStore>) -> Arc<EventContext> {
+        Arc::new(EventContext::new(self.clone()))
     }
-
 }
 
 /// EventStoreError is the error type for the event store.
