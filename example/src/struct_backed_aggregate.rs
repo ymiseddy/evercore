@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use eventide::{EventStore, aggregate::{StructBackedAggregate, StructAggregateImpl, CanRequest, Aggregate}, EventStoreError, event::Event};
 use serde::{Serialize, Deserialize};
 
@@ -77,9 +79,9 @@ impl CanRequest<UserRequests, UserRequests> for User {
     }
 }
 
-pub(crate) async fn user_example(event_store: &EventStore) {
+pub(crate) async fn user_example(event_store: Arc<EventStore>) {
 
-    let context = event_store.get_context();
+    let context = event_store.clone().get_context();
     let mut user = StructBackedAggregate::<User>::new(context.clone()).await.unwrap();
     let id = user.get_id();
     println!("User Id: {}", id);
@@ -94,7 +96,7 @@ pub(crate) async fn user_example(event_store: &EventStore) {
     let user_state = user.owned_state();
     println!("User State: {:?}", user_state);
 
-    let context = event_store.get_context();
+    let context = event_store.clone().get_context();
     let mut user = StructBackedAggregate::<User>::load( context.clone(), id).await.unwrap();
     user.reqeust(UserRequests::Updated {
         name: "Samuel Jackson".to_string(),
@@ -106,7 +108,7 @@ pub(crate) async fn user_example(event_store: &EventStore) {
     println!("User State: {:?}", user_state);
 
 
-    let context = event_store.get_context();
+    let context = event_store.clone().get_context();
     let user = StructBackedAggregate::<User>::load( context.clone(), id).await.unwrap();
     let user_state = user.owned_state();
     println!("User State: {:?}", user_state);

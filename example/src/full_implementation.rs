@@ -23,10 +23,10 @@ struct AccountState {
     balance: u32,
 }
 
-struct Account<'a> {
+struct Account {
     id: u64,
     version: u64,
-    context: Option<Arc<EventContext<'a>>>,
+    context: Option<Arc<EventContext>>,
     state: AccountState,
 }
 
@@ -40,8 +40,8 @@ struct DepositEvent {
     amount: u32,
 }
 
-impl<'a> Account<'_> {
-    async fn new(ctx: Arc<EventContext<'a>>) -> Result<Account<'a>, AccountError> {
+impl<'a> Account {
+    async fn new(ctx: Arc<EventContext>) -> Result<Account, AccountError> {
         Ok(Account {
             id: ctx.next_aggregate_id().await?,
             version: 0,
@@ -50,7 +50,7 @@ impl<'a> Account<'_> {
         })
     }
 
-    async fn load(ctx: Arc<EventContext<'a>>, id: u64) -> Result<Account<'a>, AccountError>     {
+    async fn load(ctx: Arc<EventContext>, id: u64) -> Result<Account, AccountError>     {
         let mut account = Account{
             id,
             version: 0,
@@ -99,7 +99,7 @@ impl<'a> Account<'_> {
 
 }
 
-impl<'a> Aggregate<'a> for Account<'a> {
+impl<'a> Aggregate<'a> for Account {
     fn get_id(&self) -> u64 {
         self.id
     }
@@ -158,10 +158,10 @@ impl<'a> Aggregate<'a> for Account<'a> {
     }
 }
 
-pub(crate) async fn account_example(event_store: &EventStore) {
+pub(crate) async fn account_example(event_store: Arc<EventStore>) {
     let id: u64;
 
-    let context = event_store.get_context();
+    let context = event_store.clone().get_context();
     {
         let mut account = Account::new(context.clone()).await.unwrap();
         id = account.get_id();

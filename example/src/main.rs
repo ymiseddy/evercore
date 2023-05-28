@@ -18,6 +18,6 @@ async fn main() {
     let event_store = EventStore::new(Arc::new(memory));
     let event_store = Arc::new(event_store);
 
-    account_example(&event_store.clone()).await;
-    user_example(&event_store.clone()).await;
+    account_example(event_store.clone()).await;
+    user_example(event_store.clone()).await;
 }

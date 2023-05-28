@@ -9,7 +9,7 @@ pub struct EventContext {
     captured_events: RefCell<Vec<Event>>,
 }
 
-impl<'a> EventContext {
+impl EventContext {
     pub fn new(event_store: Arc<EventStore>) -> EventContext {
         EventContext {
             event_store,
@@ -69,9 +69,9 @@ impl<'a> EventContext {
     }
 
     pub async fn commit(&self) -> Result<(), EventStoreError> {
-        let mut events = self.captured_events.borrow_mut();   
+        let events = self.captured_events.borrow().clone();   
         self.event_store.save_events(&events).await?;
-        events.clear();
+        self.captured_events.borrow_mut().clear();
         Ok(())
     }
 
