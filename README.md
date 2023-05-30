@@ -3,7 +3,7 @@
 # This project is a work in progress - not ready for prime time.
 
 # TODO List:
-- [ ] Snapshoting
+- [X] Snapshoting
     - Implement on EventContext + sane way to determine frequency 
 - [ ] Implement database backends for
     - [ ] sqlite3

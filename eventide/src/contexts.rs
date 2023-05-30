@@ -1,11 +1,12 @@
 use std::{sync::Arc, cell::RefCell};
 use serde::de::DeserializeOwned;
-use crate::{EventStore, event::Event, EventStoreError, aggregate::Aggregate};
+use crate::{EventStore, event::Event, EventStoreError, aggregate::Aggregate, snapshot::Snapshot};
 
 
-/// EventContext is a struct that is passed to the aggregate when an event is published.
+/// A struct that is passed to the aggregate when it is loaded or created.
 pub struct EventContext {
     event_store: Arc<EventStore>,
+    captured_snapshots: RefCell<Vec<Snapshot>>,
     captured_events: RefCell<Vec<Event>>,
 }
 
@@ -13,6 +14,7 @@ impl EventContext {
     pub fn new(event_store: Arc<EventStore>) -> EventContext {
         EventContext {
             event_store,
+            captured_snapshots: RefCell::new(Vec::new()),
             captured_events: RefCell::new(Vec::new()),
         }
     }
@@ -54,13 +56,22 @@ impl EventContext {
     where
         T: serde::Serialize + DeserializeOwned
     {
+        let new_version = source.get_version() + 1;
+
+
         let event = Event::new(
             source.get_id(),
             source.get_type(),
-            source.get_version() + 1,
+            new_version,
             event_type,
             data,
         )?;
+
+        let snapshot_frequency: u64 = source.snapshot_frequency().into();
+        if snapshot_frequency > 0 && new_version % snapshot_frequency == 0 {
+            let snapshot = source.get_snapshot()?;
+            self.captured_snapshots.borrow_mut().push(snapshot);
+        }
 
         source.apply_event(&event)?;
 
@@ -70,8 +81,8 @@ impl EventContext {
 
     pub async fn commit(&self) -> Result<(), EventStoreError> {
         let events = self.captured_events.borrow().clone();   
-        self.event_store.save_events(&events).await?;
-        self.captured_events.borrow_mut().clear();
+        let snapshots = self.captured_snapshots.borrow().clone();
+        self.event_store.write_updates(&events, &snapshots).await?;
         Ok(())
     }
 

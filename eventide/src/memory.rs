@@ -84,17 +84,15 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
         Ok(None)
     }
 
-    async fn save_events(&self, events: &[Event]) -> Result<(), EventStoreError> {
+    async fn write_updates(&self, events: &[Event], snapshots: &[Snapshot]) -> Result<(), EventStoreError> {
         let mut memory_store = self.memory_store.lock().unwrap();
         for event in events {
             memory_store.events.push(event.clone());
         }
+        for snapshot in snapshots {
+            memory_store.snapshots.push(snapshot.clone());
+        }
         Ok(())
     }
 
-    async fn save_snapshot(&self, snapshot: Snapshot) -> Result<(), EventStoreError> {
-        let mut memory_store = self.memory_store.lock().unwrap();
-        memory_store.snapshots.push(snapshot);
-        Ok(())
-    }
 }

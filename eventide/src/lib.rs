@@ -30,8 +30,7 @@ pub trait EventStoreStorageEngine {
         aggregate_id: u64,
         aggregate_type: &str,
     ) -> Result<Option<Snapshot>, EventStoreError>;
-    async fn save_events(&self, events: &[Event]) -> Result<(), EventStoreError>;
-    async fn save_snapshot(&self, snapshot: Snapshot) -> Result<(), EventStoreError>;
+    async fn write_updates(&self, events: &[Event], snapshot: &[Snapshot]) -> Result<(), EventStoreError>;
 }
 
 /// EventStore is the main struct for the event store.
@@ -69,12 +68,9 @@ impl EventStore {
         self.storage_engine.get_snapshot(aggregate_id, aggregate_type).await
     }
 
-    pub async fn save_events(&self, events: &[Event]) -> Result<(), EventStoreError> {
-        self.storage_engine.save_events(events).await
-    }
-
-    pub async fn save_snapshot(&self, snapshot: Snapshot) -> Result<(), EventStoreError> {
-        self.storage_engine.save_snapshot(snapshot).await
+    pub async fn write_updates(&self, events: &[Event], snapshots: &[Snapshot]) -> Result<(), EventStoreError> {
+        self.storage_engine.write_updates(events, snapshots).await?;
+        Ok(())
     }
 
     pub fn get_context(self: Arc<EventStore>) -> Arc<EventContext> {

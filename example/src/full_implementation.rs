@@ -112,6 +112,10 @@ impl<'a> Aggregate<'a> for Account {
         "account"
     }
 
+    fn snapshot_frequency(&self) -> u32 {
+        10 
+    } 
+
     fn get_version(&self) -> u64 {
         self.version
     }

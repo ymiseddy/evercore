@@ -8,23 +8,43 @@ use crate::EventContext;
 
 /// Aggregate is a trait that must be implemented by any aggregate that is to be stored in the event store.
 pub trait Aggregate<'a> {
+
+    /// returns the id of the aggregate.
     fn get_id(&self) -> u64;
+
+    /// sets the id of the aggregate.
     fn set_id(&mut self, id: u64);
+
+    /// returns frequency of snapshots for this aggregate. 0 means no snapshots.
+    fn snapshot_frequency(&self) -> u32;
+
+    /// returns the type of the aggregate.
     fn get_type(&self) -> &str;
+
+    /// returns the version of the aggregate.
     fn get_version(&self) -> u64;
+
+    /// applies a snapshot to the aggregate.
     fn apply_snapshot(&mut self, snapshot: &Snapshot) -> Result<(), EventStoreError>;
+
+    /// applies an event to the aggregate.
     fn apply_event(&mut self, event: &Event) -> Result<(), EventStoreError>;
+
+    /// returns a snapshot of the aggregate.
     fn get_snapshot(&self) -> Result<Snapshot, EventStoreError>;
 }
 
-/// StructAggregateImpl is a trait that must be implemented by any struct that is to be used as a StructBackedAggregate.
+/// A trait that must be implemented by any struct that is to be used as a StructBackedAggregate.
 pub trait StructAggregateImpl
 {
     fn get_type(&self) -> &str;
     fn apply_event(&mut self, event: &Event) -> Result<(), EventStoreError>;
+    fn snapshot_frequency(&self) -> u32 {
+        10
+    }
 }
 
-/// CanRequest is a trait that must be implemented by any struct that is to be used as a StructBackedAggregate. 
+/// A trait that must be implemented by any struct that is to be used as a StructBackedAggregate. 
 /// It allows the aggregate do indicate the types of commands and events it accepts.
 pub trait CanRequest<TCommand, TEvent>
 where 
@@ -35,7 +55,7 @@ where
 }
 
 
-/// StructBackedAggregate is a generic implementation of an aggregate that is backed by a struct.
+/// Generic implementation of an aggregate that is backed by a struct.
 /// This saves having to implement the boilerplate code for each aggregate.
 pub struct StructBackedAggregate<T>
 where 
@@ -65,6 +85,10 @@ impl<'a, T> Aggregate<'a> for StructBackedAggregate<T>
 
     fn get_version(&self) -> u64 {
         self.version
+    }
+
+    fn snapshot_frequency(&self) -> u32 {
+        self.state.snapshot_frequency()
     }
 
     fn apply_snapshot(&mut self, snapshot: &Snapshot) -> Result<(), EventStoreError> {
