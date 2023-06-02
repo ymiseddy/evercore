@@ -114,6 +114,7 @@ impl<'a, T> Aggregate<'a> for StructBackedAggregate<T>
 
         Ok(snapshot)
     }
+
 }
 
 impl<'a, T> StructBackedAggregate<T> 
@@ -133,7 +134,7 @@ impl<'a, T> StructBackedAggregate<T>
         })
     }
 
-    pub fn reqeust<TCommand, TEvent>(&mut self, request: TCommand) -> Result<(), EventStoreError>
+    pub fn request<TCommand, TEvent>(&mut self, request: TCommand) -> Result<(), EventStoreError>
     where 
         TCommand: 'a + Serialize + DeserializeOwned,
         TEvent: 'a + Serialize + DeserializeOwned,
@@ -160,6 +161,10 @@ impl<'a, T> StructBackedAggregate<T>
 
         ctx.load(&mut state_aggregate).await?; 
         Ok(state_aggregate)
+    }
+
+    pub fn get_state(&self) -> &T {
+        &self.state
     }
 
 

@@ -85,7 +85,7 @@ pub(crate) async fn user_example(event_store: Arc<EventStore>) {
     let mut user = StructBackedAggregate::<User>::new(context.clone()).await.unwrap();
     let id = user.get_id();
     println!("User Id: {}", id);
-    user.reqeust(UserRequests::Created {
+    user.request(UserRequests::Created {
         name: "John Doe".to_string(),
         email: "jdoe@example.com".to_string(),
         password_hash: "123456".to_string(),
@@ -98,7 +98,7 @@ pub(crate) async fn user_example(event_store: Arc<EventStore>) {
 
     let context = event_store.clone().get_context();
     let mut user = StructBackedAggregate::<User>::load( context.clone(), id).await.unwrap();
-    user.reqeust(UserRequests::Updated {
+    user.request(UserRequests::Updated {
         name: "Samuel Jackson".to_string(),
         email: "sammyj@example.com".to_string(),
     }).unwrap();

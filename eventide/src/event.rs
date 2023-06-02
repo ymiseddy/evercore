@@ -13,9 +13,10 @@ pub struct Event {
 }
 
 impl Event {
-    pub fn new<T>(aggregate_id: u64, 
-        aggregate_type: 
-        &str, version: u64, 
+    pub fn new<T>(
+        aggregate_id: u64, 
+        aggregate_type: &str, 
+        version: u64, 
         event_type: &str, 
         data: &T) -> Result<Event, EventStoreError>
         where T: Serialize + DeserializeOwned

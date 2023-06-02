@@ -76,7 +76,8 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
         aggregate_type: &str,
     ) -> Result<Option<Snapshot>, EventStoreError> {
         let memory_store = self.memory_store.lock().unwrap();
-        for snapshot in &memory_store.snapshots {
+        let iter = memory_store.snapshots.iter().rev();
+        for snapshot in iter {
             if snapshot.aggregate_id == aggregate_id && snapshot.aggregate_type == aggregate_type {
                 return Ok(Some(snapshot.clone()));
             }

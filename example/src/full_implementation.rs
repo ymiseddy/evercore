@@ -144,7 +144,7 @@ impl<'a> Aggregate<'a> for Account {
                 let data: WithdrawEvent = event.deserialize()?;
                 self.state.balance -= data.amount;
             },
-            _ => return Err(EventStoreError::ContextError2("Unknown event type".to_string()))
+            _ => return Err(EventStoreError::ApplyEventError("Unknown event type".to_string()))
         };
         self.version = event.version;
         println!("After event applied State: {:?}", self.state);

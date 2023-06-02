@@ -1,9 +1,11 @@
 /// EventStore is a library for storing and retrieving events from an event store.
 pub mod event;
-pub mod memory;
 pub mod snapshot;
 pub mod aggregate;
 pub mod contexts;
+
+#[cfg(feature = "memory")]
+pub mod memory;
 
 use crate::contexts::EventContext;
 
@@ -113,21 +115,137 @@ pub enum EventStoreError {
     GetNextAggregateIdError(Box<dyn std::error::Error>),
 
     #[error("Error applying snapshot.")]
-    ApplySnapshotError(Box<dyn std::error::Error>),
+    ApplySnapshotError(String),
+
+    #[error("Error processing request.")]
+    RequestProcessingError(String),
 
     #[error("Error applying event.")]
-    ApplyEventError(Box<dyn std::error::Error>),
+    ApplyEventError(String),
 
     #[error("Error during context callback.")]
     ContextError(Box<dyn std::error::Error>),
 
     #[error("Attempt to publish an event before context is set.")]
     NoContext,
+
+    #[error("Error in storage engine.")]
+    StorageEngineError(Box<dyn std::error::Error>),
     
-    #[error("Unexpected error during context callback.")]
-    ContextError2(String),
+    #[error("Error in storage engine.")]
+    StorageEngineConnectionError(String),
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use serde::{Serialize, Deserialize};
+
+    use crate::{aggregate::{StructAggregateImpl, CanRequest, StructBackedAggregate}, EventStoreError};
+
+
+    #[derive(Default, Clone, Serialize, Deserialize)]
+    struct Account {
+        user_id: u64,
+        balance: u64,
+    }
+    
+    #[derive(Serialize, Deserialize)]
+    struct AccountCreation {
+        user_id: u64,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct AccountUpdate {
+        amount: u64,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    enum AccountCommands {
+        CreateAccount(AccountCreation),
+        CreditAccount(AccountUpdate),
+        DebitAccount(AccountUpdate),
+    }
+
+
+    #[derive(Serialize, Deserialize)]
+    enum AccountEvents {
+        AccountCreated(AccountCreation),
+        AccountCredited(AccountUpdate),
+        AccountDebite(AccountUpdate),
+    }
+
+    impl StructAggregateImpl for Account {
+        fn get_type(&self) -> &str {
+            "account"
+        }
+
+        fn apply_event(&mut self, event: &crate::event::Event) -> Result<(), crate::EventStoreError> {
+
+            let event = event.deserialize::<AccountEvents>()?;
+
+            match event {
+                AccountEvents::AccountCreated(event) => {
+                    self.user_id = event.user_id;
+                },
+                AccountEvents::AccountCredited(event) => {
+                    self.balance += event.amount;
+                },
+                AccountEvents::AccountDebite(event) => {
+                    if event.amount > self.balance {
+                        return Err(EventStoreError::RequestProcessingError("Insufficient funds".to_string()));
+                    }
+                    self.balance -= event.amount;
+                },
+            }
+            return Ok(());
+        }
+    }
+
+
+    impl CanRequest<AccountCommands, AccountEvents> for Account {
+        fn request(&self, request: AccountCommands) -> Result<(String, AccountEvents), crate::EventStoreError> {
+
+            match request {
+                AccountCommands::CreateAccount(command) => {
+                    Ok(("created".to_string(), AccountEvents::AccountCreated(command)))
+                },
+                AccountCommands::CreditAccount(command) => {
+                    if command.amount > self.balance {
+                    }
+                    Ok(("credited".to_string(), AccountEvents::AccountCredited(command)))
+                },
+                AccountCommands::DebitAccount(command) => {
+                    Ok(("debited".to_string(), AccountEvents::AccountDebite(command)))
+                },
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_eventstore() {
+        let memory = crate::memory::MemoryStorageEngine::new();
+        let event_store = crate::EventStore::new(Arc::new(memory));
+        let event_store = Arc::new(event_store);
+        let context = event_store.get_context();
+        {
+            let mut account = StructBackedAggregate::<Account>::new(context.clone()).await.unwrap();
+
+            account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
+
+            account.request(AccountCommands::CreditAccount(AccountUpdate { amount: 100 })).unwrap();
+
+            account.request(AccountCommands::DebitAccount(AccountUpdate { amount: 50 })).unwrap();
+
+            account.request(AccountCommands::DebitAccount(AccountUpdate { amount: 10 })).unwrap();
+
+            let state = account.get_state();
+            assert!(state.balance == 40);
+        }
+        context.commit().await.unwrap();
+    }
+
+
+
 }
