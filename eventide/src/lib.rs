@@ -19,17 +19,17 @@ use thiserror::Error;
 /// EventStorageEnging is a trait that must be implemented by any storage engine that is to be used by the event store.
 #[async_trait::async_trait]
 pub trait EventStoreStorageEngine {
-    async fn next_aggregate_id(&self) -> Result<u64, EventStoreError>;
+    async fn next_aggregate_id(&self, aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError>;
 
     async fn get_events(
         &self,
-        aggregate_id: u64,
+        aggregate_id: i64,
         aggregate_type: &str,
-        version: u64,
+        version: i64,
     ) -> Result<Vec<Event>, EventStoreError>;
     async fn get_snapshot(
         &self,
-        aggregate_id: u64,
+        aggregate_id: i64,
         aggregate_type: &str,
     ) -> Result<Option<Snapshot>, EventStoreError>;
     async fn write_updates(&self, events: &[Event], snapshot: &[Snapshot]) -> Result<(), EventStoreError>;
@@ -49,22 +49,22 @@ impl EventStore {
         EventStore { storage_engine }
     }
 
-    pub async fn next_aggregate_id(&self) -> Result<u64, EventStoreError> {
-        self.storage_engine.next_aggregate_id().await 
+    pub async fn next_aggregate_id(&self, aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError> {
+        self.storage_engine.next_aggregate_id(aggregate_type, natural_key).await 
     }
 
     pub async fn get_events(
         &self,
-        aggregate_id: u64,
+        aggregate_id: i64,
         aggregate_type: &str,
-        version: u64,
+        version: i64,
     ) -> Result<Vec<Event>, EventStoreError> {
         self.storage_engine.get_events(aggregate_id, aggregate_type, version).await
     }
 
     pub async fn get_snapshot(
         &self,
-        aggregate_id: u64,
+        aggregate_id: i64,
         aggregate_type: &str,
     ) -> Result<Option<Snapshot>, EventStoreError> {
         self.storage_engine.get_snapshot(aggregate_id, aggregate_type).await
@@ -85,10 +85,13 @@ impl EventStore {
 pub enum EventStoreError {
 
     #[error("Aggregate not found: {0:?}")]
-    AggregateNotFound((String, u64)),
+    AggregateNotFound((String, i64)),
 
     #[error("Error serializaing event.")]
     EventSerializationError(serde_json::Error),
+    
+    #[error("Error serializaing metadata for event.")]
+    EventMetaDataSerializationError(serde_json::Error),
 
     #[error("Error deserializaing event.")]
     EventDeserializationError(serde_json::Error),
@@ -131,6 +134,9 @@ pub enum EventStoreError {
 
     #[error("Error in storage engine.")]
     StorageEngineError(Box<dyn std::error::Error>),
+   
+    #[error("Error in storage engine.")]
+    StorageEngineErrorOther(String),
     
     #[error("Error in storage engine.")]
     StorageEngineConnectionError(String),
@@ -147,18 +153,18 @@ mod tests {
 
     #[derive(Default, Clone, Serialize, Deserialize)]
     struct Account {
-        user_id: u64,
-        balance: u64,
+        user_id: i64,
+        balance: i64,
     }
     
     #[derive(Serialize, Deserialize)]
     struct AccountCreation {
-        user_id: u64,
+        user_id: i64,
     }
 
     #[derive(Serialize, Deserialize)]
     struct AccountUpdate {
-        amount: u64,
+        amount: i64,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -230,7 +236,7 @@ mod tests {
         let event_store = Arc::new(event_store);
         let context = event_store.get_context();
         {
-            let mut account = StructBackedAggregate::<Account>::new(context.clone()).await.unwrap();
+            let mut account = StructBackedAggregate::<Account>::new(context.clone(), None).await.unwrap();
 
             account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
 

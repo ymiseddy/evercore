@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::{sync::{Arc, Mutex}, collections::HashMap};
 
 use crate::{ EventStoreError, event::Event, snapshot::Snapshot, EventStoreStorageEngine};
 
@@ -7,9 +7,10 @@ type DynMemoryStore = Arc<Mutex<MemoryStore>>;
 
 #[derive(Default)]
 pub struct MemoryStore {
-    id: u64, 
+    id: i64, 
     events: Vec<Event>,
     snapshots: Vec<Snapshot>,
+    natural_key_map: HashMap<String, i64>,
 }
 
 impl MemoryStore {
@@ -18,6 +19,7 @@ impl MemoryStore {
             id: 0,
             events: Vec::new(),
             snapshots: Vec::new(),
+            natural_key_map: HashMap::new(),
         }
     }
 }
@@ -48,17 +50,23 @@ impl Default for MemoryStorageEngine {
 #[async_trait::async_trait]
 impl EventStoreStorageEngine for MemoryStorageEngine {
 
-    async fn next_aggregate_id(&self) -> Result<u64, EventStoreError> {
+    async fn next_aggregate_id(&self, _aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError> {
         let mut memory_store = self.memory_store.lock().unwrap();
         memory_store.id += 1;
-        Ok(memory_store.id)
+        let id = memory_store.id;
+
+        if natural_key.is_some() {
+            memory_store.natural_key_map.insert(natural_key.unwrap().to_string(), id);
+        }
+
+        Ok(id)
     }
 
     async fn get_events(
         &self,
-        aggregate_id: u64,
+        aggregate_id: i64,
         aggregate_type: &str,
-        version: u64,
+        version: i64,
     ) -> Result<Vec<Event>, EventStoreError> {
         let memory_store = self.memory_store.lock().unwrap();
         let mut events = Vec::new();
@@ -72,7 +80,7 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
 
     async fn get_snapshot(
         &self,
-        aggregate_id: u64,
+        aggregate_id: i64,
         aggregate_type: &str,
     ) -> Result<Option<Snapshot>, EventStoreError> {
         let memory_store = self.memory_store.lock().unwrap();

@@ -4,14 +4,14 @@ use crate::EventStoreError;
 /// Snapshot is a representation of the aggregate state at a given point in time.
 #[derive(Clone, Debug)]
 pub struct Snapshot {
-    pub aggregate_id: u64,
+    pub aggregate_id: i64,
     pub aggregate_type: String,
-    pub version: u64,
+    pub version: i64,
     pub data: String,
 }
 
 impl Snapshot {
-    pub fn new<T>(aggregate_id: u64, aggregate_type: &str, version: u64, data: &T) -> Result<Snapshot, EventStoreError>
+    pub fn new<T>(aggregate_id: i64, aggregate_type: &str, version: i64, data: &T) -> Result<Snapshot, EventStoreError>
         where T: Serialize + DeserializeOwned
     {
         let state = serde_json::to_string(&data).map_err(EventStoreError::SnapshotSerializationError)?;
@@ -38,7 +38,7 @@ mod tests {
 
     #[derive(Serialize, Deserialize, Debug)]
     struct SampleState {
-        value: u64,
+        value: i64,
         name: String,
     }
 

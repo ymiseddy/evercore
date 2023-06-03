@@ -10,19 +10,19 @@ use crate::EventContext;
 pub trait Aggregate<'a> {
 
     /// returns the id of the aggregate.
-    fn get_id(&self) -> u64;
+    fn get_id(&self) -> i64;
 
     /// sets the id of the aggregate.
-    fn set_id(&mut self, id: u64);
+    fn set_id(&mut self, id: i64);
 
     /// returns frequency of snapshots for this aggregate. 0 means no snapshots.
-    fn snapshot_frequency(&self) -> u32;
+    fn snapshot_frequency(&self) -> i32;
 
     /// returns the type of the aggregate.
     fn get_type(&self) -> &str;
 
     /// returns the version of the aggregate.
-    fn get_version(&self) -> u64;
+    fn get_version(&self) -> i64;
 
     /// applies a snapshot to the aggregate.
     fn apply_snapshot(&mut self, snapshot: &Snapshot) -> Result<(), EventStoreError>;
@@ -39,7 +39,7 @@ pub trait StructAggregateImpl
 {
     fn get_type(&self) -> &str;
     fn apply_event(&mut self, event: &Event) -> Result<(), EventStoreError>;
-    fn snapshot_frequency(&self) -> u32 {
+    fn snapshot_frequency(&self) -> i32 {
         10
     }
 }
@@ -61,8 +61,8 @@ pub struct StructBackedAggregate<T>
 where 
     T: DeserializeOwned + Default + Serialize + StructAggregateImpl
 {
-    id: u64,
-    version: u64,
+    id: i64,
+    version: i64,
     context: Option<Arc<EventContext>>,
     state: T,
 }
@@ -71,11 +71,11 @@ impl<'a, T> Aggregate<'a> for StructBackedAggregate<T>
     where T: DeserializeOwned + Default + Serialize + StructAggregateImpl + Clone
 {
 
-    fn get_id(&self) -> u64 {
+    fn get_id(&self) -> i64 {
         self.id
     }
 
-    fn set_id(&mut self, id: u64) {
+    fn set_id(&mut self, id: i64) {
         self.id = id;
     }
 
@@ -83,11 +83,11 @@ impl<'a, T> Aggregate<'a> for StructBackedAggregate<T>
         self.state.get_type()
     }
 
-    fn get_version(&self) -> u64 {
+    fn get_version(&self) -> i64 {
         self.version
     }
 
-    fn snapshot_frequency(&self) -> u32 {
+    fn snapshot_frequency(&self) -> i32 {
         self.state.snapshot_frequency()
     }
 
@@ -124,13 +124,17 @@ impl<'a, T> StructBackedAggregate<T>
 
 
 {
-    pub async fn new(ctx: Arc<EventContext>) -> Result<StructBackedAggregate<T>, EventStoreError> 
+    pub async fn new(ctx: Arc<EventContext>, natural_key: Option<&str>) -> Result<StructBackedAggregate<T>, EventStoreError> 
     {
+        let state = T::default();
+        let aggregate_type = state.get_type();
+
+
         Ok(StructBackedAggregate {
-            id: ctx.next_aggregate_id().await?,
+            id: ctx.next_aggregate_id(aggregate_type, natural_key).await?,
             version: 0,
             context: Some(ctx),
-            state: T::default(),
+            state
         })
     }
 
@@ -151,7 +155,7 @@ impl<'a, T> StructBackedAggregate<T>
         Ok(())
     }
 
-    pub async fn load(ctx: Arc<EventContext>, id: u64) -> Result<StructBackedAggregate<T>, EventStoreError>     {
+    pub async fn load(ctx: Arc<EventContext>, id: i64) -> Result<StructBackedAggregate<T>, EventStoreError>     {
         let mut state_aggregate = StructBackedAggregate{
             id,
             version: 0,

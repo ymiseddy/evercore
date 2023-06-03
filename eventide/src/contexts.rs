@@ -1,4 +1,4 @@
-use std::{sync::Arc, cell::RefCell};
+use std::{sync::Arc, cell::RefCell, collections::HashMap};
 use serde::de::DeserializeOwned;
 use crate::{EventStore, event::Event, EventStoreError, aggregate::Aggregate, snapshot::Snapshot};
 
@@ -8,6 +8,7 @@ pub struct EventContext {
     event_store: Arc<EventStore>,
     captured_snapshots: RefCell<Vec<Snapshot>>,
     captured_events: RefCell<Vec<Event>>,
+    context: HashMap<String, String>
 }
 
 impl EventContext {
@@ -16,11 +17,20 @@ impl EventContext {
             event_store,
             captured_snapshots: RefCell::new(Vec::new()),
             captured_events: RefCell::new(Vec::new()),
+            context: HashMap::new()
         }
     }
 
-    pub async fn next_aggregate_id(&self) -> Result<u64, EventStoreError> {
-        self.event_store.next_aggregate_id().await
+    pub fn add_metadata<T>(&mut self, key: &str, value: &str) -> Result<(), EventStoreError>
+
+    where
+        T: serde::Serialize + DeserializeOwned    {
+        self.context.insert(key.to_string(), value.to_string());
+        Ok(())
+    }
+
+    pub async fn next_aggregate_id(&self, aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError> {
+        self.event_store.next_aggregate_id(aggregate_type, natural_key).await
     }
 
     pub async fn load(&self, aggregate: &mut dyn Aggregate<'_>) -> Result<(), EventStoreError> {
@@ -58,8 +68,7 @@ impl EventContext {
     {
         let new_version = source.get_version() + 1;
 
-
-        let event = Event::new(
+        let mut event = Event::new(
             source.get_id(),
             source.get_type(),
             new_version,
@@ -67,7 +76,11 @@ impl EventContext {
             data,
         )?;
 
-        let snapshot_frequency: u64 = source.snapshot_frequency().into();
+        if !self.context.is_empty() {
+            event.set_metadata(&self.context)?;
+        }
+
+        let snapshot_frequency: i64 = source.snapshot_frequency().into();
         if snapshot_frequency > 0 && new_version % snapshot_frequency == 0 {
             let snapshot = source.get_snapshot()?;
             self.captured_snapshots.borrow_mut().push(snapshot);

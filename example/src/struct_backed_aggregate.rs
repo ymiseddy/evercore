@@ -75,7 +75,6 @@ impl CanRequest<UserRequests, UserRequests> for User {
                 Ok(("password_updated".to_string(), event))
             },
         }
-
     }
 }
 
