@@ -108,7 +108,7 @@ impl QueryBuilder for PostgresqlBuilder {
     }
 
     fn insert_aggregate_instance(&self) -> String {
-        "INSERT INTO aggregate_instances (id, aggregate_type_id, natural_key) VALUES ($1, $2, $3)"
+        "INSERT INTO aggregate_instances (aggregate_type_id, natural_key) VALUES ($1, $2) RETURNING id;"
         .to_string()
     }
 
@@ -192,7 +192,7 @@ impl QueryBuilder for SqliteBuilder {
     }
 
     fn insert_aggregate_instance(&self) -> String {
-        "INSERT INTO aggregate_instances (id, aggregate_type_id, natural_key) VALUES ($1, $2, $3)"
+        "INSERT INTO aggregate_instances (aggregate_type_id, natural_key) VALUES ($1, $2) RETURNING id;"
         .to_string()
     }
 
@@ -217,9 +217,6 @@ impl QueryBuilder for SqliteBuilder {
     }
 
 }
-
-
-
 
 pub struct SqlxStorageEngine {
     dbtype: DbType,
@@ -331,8 +328,31 @@ impl SqlxStorageEngine {
 
 #[async_trait::async_trait]
 impl EventStoreStorageEngine for SqlxStorageEngine {
-    async fn next_aggregate_id(&self, aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError> {
-        todo!();
+    async fn next_aggregate_id(
+        &self, 
+        aggregate_type: &str, 
+        natural_key: Option<&str>
+    ) -> Result<i64, EventStoreError> {
+
+        let aggregate_type_id = self.get_aggregate_type_id(aggregate_type).await?;
+
+        println!("aggregate_type_id: {}", aggregate_type_id);
+        let query = self.query_builder.insert_aggregate_instance();
+        println!("query: {}", query);
+
+
+        let mut connection = self.get_connection().await?;
+        let row = sqlx::query(&query)
+            .bind(aggregate_type_id)
+            .bind(natural_key)
+            .fetch_one(&mut connection)
+            .await
+            .map_err(|e| {
+                EventStoreError::StorageEngineError(Box::new(e))
+            })?;
+
+        let id: i64 = row.get(0);
+        Ok(id)
     }
 
     async fn get_events(
