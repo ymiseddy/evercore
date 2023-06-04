@@ -301,12 +301,12 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             })?;
 
         let events = rows.into_iter().map(|row| {
-            let aggregate_id: i64 = row.get(0);
-            let aggregate_type: String = row.get(1);
-            let version: i64 = row.get(2);
-            let event_type: String = row.get(3);
-            let data: String = row.get(4);
-            let metadata: Option<String> = row.get(5);
+            let aggregate_id: i64 = row.get("aggregate_id");
+            let aggregate_type: String = row.get("aggregate_type");
+            let version: i64 = row.get("version");
+            let event_type: String = row.get("event_type");
+            let data: String = row.get("data");
+            let metadata: Option<String> = row.get("metadata");
             
             Event {
                 aggregate_id,
@@ -340,10 +340,10 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
         let snapshot = match row {
             Some(row) => {
 
-                let aggregate_id: i64 = row.get(0);
-                let aggregate_type: String = row.get(1);
-                let version: i64 = row.get(2);
-                let data: String = row.get(3);
+                let aggregate_id: i64 = row.get("aggregate_id");
+                let aggregate_type: String = row.get("aggregate_type");
+                let version: i64 = row.get("version");
+                let data: String = row.get("data");
 
                 let snapshot = Snapshot {
                     aggregate_id,
