@@ -20,9 +20,6 @@ pub enum DbType {
     Mysql,
 }
 
-
-
-
 pub struct SqlxStorageEngine {
     pool: sqlx::AnyPool,
     aggregate_types: Arc<Mutex<HashMap<String, i64>>>,
@@ -302,20 +299,38 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
         aggregate_type: &str,
         version: i64,
     ) -> Result<Vec<Event>, EventStoreError> {
-        todo!()
-        /*
+        let aggregate_type_id = self.get_aggregate_type_id(aggregate_type).await?;
+        let query = self.query_builder.get_events();
+
         let mut connection = self.get_connection().await?;
-        let rows = sqlx::query(&self.query_builder.get_events())
+        let rows = sqlx::query(&query)
             .bind(aggregate_id)
-            .bind(aggregate_type)
+            .bind(aggregate_type_id)
             .bind(version)
             .fetch_all(&mut connection)
             .await
             .map_err(|e| {
                 EventStoreError::StorageEngineError(Box::new(e))
             })?;
-        */
 
+        let events = rows.into_iter().map(|row| {
+            let aggregate_id: i64 = row.get(0);
+            let aggregate_type: String = row.get(1);
+            let version: i64 = row.get(2);
+            let event_type: String = row.get(3);
+            let data: String = row.get(4);
+            let metadata: Option<String> = row.get(5);
+            let event = Event {
+                aggregate_id,
+                aggregate_type,
+                version,
+                event_type,
+                data,
+                metadata,
+            };
+            event
+        });
+        Ok(events.collect())
     }
 
     async fn get_snapshot(
@@ -323,7 +338,38 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
         aggregate_id: i64,
         aggregate_type: &str,
     ) -> Result<Option<Snapshot>, EventStoreError> {
-        todo!();
+        let query = self.query_builder.get_snapshot();
+        let aggregate_type_id = self.get_aggregate_type_id(aggregate_type).await?;
+
+        let mut connection = self.get_connection().await?;
+        let row = sqlx::query(&query)
+            .bind(aggregate_id)
+            .bind(aggregate_type_id)
+            .fetch_optional(&mut connection)
+            .await
+            .map_err(|e| {
+                EventStoreError::StorageEngineError(Box::new(e))
+            })?;
+        let snapshot = match row {
+            Some(row) => {
+
+                let aggregate_id: i64 = row.get(0);
+                let aggregate_type: String = row.get(1);
+                let version: i64 = row.get(2);
+                let data: String = row.get(3);
+
+                let snapshot = Snapshot {
+                    aggregate_id,
+                    aggregate_type: aggregate_type.to_string(),
+                    version,
+                    data,
+                };
+                Some(snapshot)
+            },
+            None => None
+        };
+        Ok(snapshot)
+
     }
 
     async fn write_updates(
@@ -332,6 +378,9 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
         _snapshots: &[Snapshot],
     ) -> Result<(), EventStoreError> {
         let mut connection = self.get_connection().await?;
+        let mut tx = connection.begin().await.map_err(|e| {
+            EventStoreError::StorageEngineError(Box::new(e))
+        })?;
 
         for event in _events {
             let event_type_id = self.get_event_type_id(&event.event_type).await?;
@@ -347,11 +396,11 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             sqlx::query(&self.query_builder.insert_event())
                 .bind(aggregate_id)
                 .bind(aggregate_type_id)
-                .bind(event_type_id)
                 .bind(version)
+                .bind(event_type_id)
                 .bind(&event.data)
                 .bind(&event.metadata)
-                .execute(&mut connection)
+                .execute(&mut tx)
                 .await
                 .map_err(|e| {
                     EventStoreError::StorageEngineError(Box::new(e))
@@ -369,13 +418,18 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             sqlx::query(&self.query_builder.insert_snapshot())
                 .bind(aggregate_id)
                 .bind(aggregate_type_id)
+                .bind(snapshot.version)
                 .bind(&snapshot.data)
-                .execute(&mut connection)
+                .execute(&mut tx)
                 .await
                 .map_err(|e| {
                     EventStoreError::StorageEngineError(Box::new(e))
                 })?;
         }
+
+        tx.commit().await.map_err(|e| {
+            EventStoreError::StorageEngineError(Box::new(e))
+        })?;
 
         Ok(())
     }

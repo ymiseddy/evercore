@@ -44,6 +44,19 @@ impl QueryBuilder for SqliteBuilder {
             FOREIGN KEY(event_type_id) REFERENCES event_types(id)
         );";
         queries.push(q.to_string());
+
+        let q = "CREATE TABLE IF NOT EXISTS snapshots (
+            id INTEGER PRIMARY KEY,
+            aggregate_id INTEGER NOT NULL,
+            aggregate_type_id INTEGER NOT NULL,
+            version INTEGER NOT NULL,
+            data TEXT NOT NULL,
+            FOREIGN KEY(aggregate_id) REFERENCES aggregate_instances(id),
+            FOREIGN KEY(aggregate_type_id) REFERENCES aggregate_types(id)
+        );";
+        queries.push(q.to_string());
+
+
         queries
     }
 
@@ -100,14 +113,22 @@ impl QueryBuilder for SqliteBuilder {
         "INSERT INTO snapshots (aggregate_id, aggregate_type_id, version, data) VALUES ($1, $2, $3, $4)"
         .to_string()
     }
-
+    
     fn get_events(&self) -> String {
-        "SELECT id, aggregate_id, aggregate_type_id, version, event_type_id, data, metadata FROM events WHERE aggregate_id = $1 AND version > $2 ORDER BY version ASC;"
+        "SELECT aggregate_id, aggregate_types.name AS aggregate_type, 
+         version, event_types.name AS event_type, data, metadata 
+         FROM events 
+         LEFT JOIN aggregate_types ON aggregate_types.id = events.aggregate_type_id
+         LEFT JOIN event_types ON event_types.id = events.event_type_id
+         WHERE aggregate_id = $1 AND aggregate_type_id = $2 AND version > $3 ORDER BY version ASC;"
         .to_string()
     }
 
     fn get_snapshot(&self) -> String {
-        "SELECT id, aggregate_id, aggregate_type_id, version, data FROM snapshots WHERE aggregate_id = $1 ORDER BY version DESC LIMIT 1;"
+        "SELECT aggregate_id, aggregate_types.name as aggregate_type, version, data 
+         FROM snapshots 
+         LEFT JOIN aggregate_types ON aggregate_types.id = snapshots.aggregate_type_id
+         WHERE aggregate_id = $1 AND aggregate_type_id = $2 ORDER BY version DESC LIMIT 1;"
         .to_string()
     }
 

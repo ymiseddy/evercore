@@ -30,14 +30,14 @@ impl QueryBuilder for MysqlBuilder {
                     REFERENCES aggregate_types(id)
         )"));
 
-        queries.push(String::from("CREATE TABLE IF NOT EXISTS event (
+        queries.push(String::from("CREATE TABLE IF NOT EXISTS events (
             id BIGINT NOT NULL AUTO_INCREMENT,
             aggregate_id BIGINT NOT NULL,
             aggregate_type_id BIGINT NOT NULL,
             version BIGINT NOT NULL,
             event_type_id BIGINT NOT NULL,
-            data JSON NOT NULL,
-            metadata JSON,
+            data TEXT NOT NULL,
+            metadata TEXT,
             PRIMARY KEY (id),
             UNIQUE KEY (aggregate_id, version),
             CONSTRAINT fk_event_aggregate_id
@@ -51,12 +51,12 @@ impl QueryBuilder for MysqlBuilder {
                     REFERENCES event_types(id)
         )"));
 
-        queries.push(String::from("CREATE TABLE IF NOT EXISTS snapshot (
+        queries.push(String::from("CREATE TABLE IF NOT EXISTS snapshots (
             id BIGINT NOT NULL AUTO_INCREMENT,
             aggregate_id BIGINT NOT NULL,
             aggregate_type_id BIGINT NOT NULL,
             version BIGINT NOT NULL,
-            data JSON NOT NULL,
+            data TEXT NOT NULL,
             PRIMARY KEY (id),
             UNIQUE KEY (aggregate_id, version),
             CONSTRAINT fk_snapshot_aggregate_id
@@ -72,11 +72,11 @@ impl QueryBuilder for MysqlBuilder {
 
     fn drop_queries(&self) -> Vec<String> {
         let mut queries = Vec::new();
-        queries.push(String::from("DROP TABLE IF EXISTS snapshot"));
-        queries.push(String::from("DROP TABLE IF EXISTS event"));
+        queries.push(String::from("DROP TABLE IF EXISTS snapshots"));
+        queries.push(String::from("DROP TABLE IF EXISTS events"));
         queries.push(String::from("DROP TABLE IF EXISTS aggregate_instance"));
-        queries.push(String::from("DROP TABLE IF EXISTS event_types"));
         queries.push(String::from("DROP TABLE IF EXISTS aggregate_types"));
+        queries.push(String::from("DROP TABLE IF EXISTS event_types"));
         queries
     }
 
@@ -101,19 +101,29 @@ impl QueryBuilder for MysqlBuilder {
     }
 
     fn insert_event(&self) -> String {
-        todo!()
+        "INSERT INTO events (aggregate_id, aggregate_type_id, version, event_type_id, data, metadata) VALUES (?, ?, ?, ?, ?, ?)".to_string()
     }
 
     fn insert_snapshot(&self) -> String {
-        todo!()
+        "INSERT INTO snapshots (aggregate_id, aggregate_type_id, version, data) VALUES (?, ?, ?, ?)".to_string()
     }
-
+    
     fn get_events(&self) -> String {
-        todo!()
+        "SELECT aggregate_id, aggregate_types.name AS aggregate_type, 
+         version, event_types.name AS event_type, data, metadata 
+         FROM events 
+         LEFT JOIN aggregate_types ON aggregate_types.id = events.aggregate_type_id
+         LEFT JOIN event_types ON event_types.id = events.event_type_id
+         WHERE aggregate_id = ? AND aggregate_type_id = ? AND version > ? ORDER BY version ASC;"
+        .to_string()
     }
 
     fn get_snapshot(&self) -> String {
-        todo!()
+        "SELECT aggregate_id, aggregate_types.name as aggregate_type, version, data 
+         FROM snapshots 
+         LEFT JOIN aggregate_types ON aggregate_types.id = snapshots.aggregate_type_id
+         WHERE aggregate_id = ? AND aggregate_type_id = ? ORDER BY version DESC LIMIT 1;"
+        .to_string()
     }
 
     fn get_aggregate_instance_id(&self) -> String {

@@ -38,8 +38,8 @@ impl QueryBuilder for PostgresqlBuilder {
             aggregate_type_id BIGINT NOT NULL,
             version BIGINT NOT NULL,
             event_type_id BIGINT NOT NULL,
-            data JSONB NOT NULL,
-            metadata JSONB,
+            data TEXT NOT NULL,
+            metadata TEXT,
             UNIQUE(aggregate_id, version),
             CONSTRAINT fk_aggregate_id
                 FOREIGN KEY(aggregate_id)
@@ -59,7 +59,7 @@ impl QueryBuilder for PostgresqlBuilder {
             aggregate_id BIGINT NOT NULL,
             aggregate_type_id BIGINT NOT NULL,
             version BIGINT NOT NULL,
-            data JSONB NOT NULL,
+            data TEXT NOT NULL,
             UNIQUE(aggregate_id, version),
             CONSTRAINT fk_aggregate_id
                 FOREIGN KEY(aggregate_id)
@@ -131,16 +131,22 @@ impl QueryBuilder for PostgresqlBuilder {
     }
 
     fn get_events(&self) -> String {
-        "SELECT id, aggregate_id, aggregate_type_id, version, event_type_id, data, metadata FROM events WHERE aggregate_id = $1  AND version > $2 ORDER BY version ASC;"
+        "SELECT aggregate_id, aggregate_types.name AS aggregate_type, 
+         version, event_types.name AS event_type, data, metadata 
+         FROM events 
+         LEFT JOIN aggregate_types ON aggregate_types.id = events.aggregate_type_id
+         LEFT JOIN event_types ON event_types.id = events.event_type_id
+         WHERE aggregate_id = $1 AND aggregate_type_id = $2 AND version > $3 ORDER BY version ASC;"
         .to_string()
     }
 
     fn get_snapshot(&self) -> String {
-        "SELECT id, aggregate_id, aggregate_type_id, version, data FROM snapshots WHERE aggregate_id = $1 ORDER BY version DESC LIMIT 1;"
+        "SELECT aggregate_id, aggregate_types.name as aggregate_type, version, data 
+         FROM snapshots 
+         LEFT JOIN aggregate_types ON aggregate_types.id = snapshots.aggregate_type_id
+         WHERE aggregate_id = $1 AND aggregate_type_id = $2 ORDER BY version DESC LIMIT 1;"
         .to_string()
     }
-
-
 }
 
 
