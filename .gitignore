@@ -17,3 +17,4 @@ scratch/
 containers/
 
 cargo-test*
+test.db
