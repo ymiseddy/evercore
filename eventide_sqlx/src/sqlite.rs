@@ -51,6 +51,7 @@ impl QueryBuilder for SqliteBuilder {
     fn drop_queries(&self) -> Vec<String> {
         vec![
             String::from("DROP TABLE IF EXISTS events;"),
+            String::from("DROP TABLE IF EXISTS snapshots;"),
             String::from("DROP TABLE IF EXISTS aggregate_instances;"),
             String::from("DROP TABLE IF EXISTS event_types;"),
             String::from("DROP TABLE IF EXISTS aggregate_types;"),

@@ -14,6 +14,7 @@ use pg::PostgresqlBuilder;
 use sqlite::SqliteBuilder;
 use mysql::MysqlBuilder;
 
+#[derive(Clone)]
 pub enum DbType {
     Sqlite,
     Postgres,
@@ -30,31 +31,26 @@ pub struct SqlxStorageEngine {
 
 impl SqlxStorageEngine {
     /// Creates a new SqlxStorageEngine.
-    pub async fn new(dbtype: DbType, connection: &str) -> Result<SqlxStorageEngine, EventStoreError> {
-        let pool = AnyPool::connect(connection).await.map_err(|e| {
-            EventStoreError::StorageEngineError(Box::new(e))
-        })?;
-
+    pub fn new(dbtype: DbType, pool: AnyPool) -> SqlxStorageEngine {
         let event_types: HashMap<String, i64> = HashMap::new();
         let event_types = Arc::new(Mutex::new(event_types));
 
         let aggregate_types: HashMap<String, i64> = HashMap::new();
         let aggregate_types = Arc::new(Mutex::new(aggregate_types));
-
+        
         let query_builder: Arc<dyn QueryBuilder + Send + Sync> = match dbtype {
             DbType::Postgres => Arc::new(PostgresqlBuilder),
             DbType::Sqlite => Arc::new(SqliteBuilder),
             DbType::Mysql => Arc::new(MysqlBuilder),
         };
 
-
-        Ok(SqlxStorageEngine {
+        SqlxStorageEngine {
             pool,
             event_types,
             aggregate_types,
             query_builder,
             dbtype,
-        })
+        }
     }
 
     async fn get_connection(&self) -> Result<PoolConnection<sqlx::Any>, EventStoreError> {
@@ -149,7 +145,6 @@ impl SqlxStorageEngine {
                 EventStoreError::StorageEngineError(Box::new(e))
             })?;
             aggregate_types.insert(aggregate_type.to_string(), id);
-
         Ok(id)
     }
     
@@ -416,22 +411,5 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
         })?;
 
         Ok(())
-    }
-}
-
-
-
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_stuff() {
-
-        /*
-
-        println!("Sqlite: {}", SchemaBuilder::aggregate_table(DbType::Sqlite));
-        println!("Postgres: {}", SchemaBuilder::aggregate_table(DbType::Postgres));
-        println!("Mysql: {}", SchemaBuilder::aggregate_table(DbType::Mysql));
-        */
     }
 }
