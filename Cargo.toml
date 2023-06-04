@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "eventide",
+    "eventide_sqlx"
+]
