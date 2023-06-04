@@ -5,9 +5,11 @@
 # TODO List:
 - [X] Snapshoting
     - Implement on EventContext + sane way to determine frequency 
-- [ ] Implement database backends for
-    - [ ] sqlite3
-    - [ ] Postgres
-    - [ ] MySql
+- [X] Implement database backends for
+    - SQLX:
+        - [X] sqlite3
+        - [X] Postgres
+        - [X] MySql
 - [ ] Notifications - maybe implement channels
-
+- [ ] Copius examples
+- [ ] Build/test process
