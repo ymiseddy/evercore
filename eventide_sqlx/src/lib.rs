@@ -125,7 +125,8 @@ impl SqlxStorageEngine {
                     let query = sqlx::query(&query)
                         .bind(aggregate_type);
 
-                    let id = match &self.dbtype {
+                    
+                    match &self.dbtype {
                         DbType::Postgres => {
                             let result = query
                                 .fetch_one(&mut tx)
@@ -145,8 +146,7 @@ impl SqlxStorageEngine {
                             result.last_insert_id()
                                 .ok_or_else(|| EventStoreError::StorageEngineErrorOther("Couldn't retrieve last insert id.".to_string()))?
                         }
-                    };
-                    id
+                    }
                 }
             };
             tx.commit().await.map_err(|e| {
@@ -193,7 +193,8 @@ impl SqlxStorageEngine {
                     let query = sqlx::query(&query)
                         .bind(event_type);
 
-                    let id = match &self.dbtype {
+                    
+                    match &self.dbtype {
                         DbType::Postgres => {
                             let result = query
                                 .fetch_one(&mut tx)
@@ -213,8 +214,7 @@ impl SqlxStorageEngine {
                             result.last_insert_id()
                                 .ok_or_else(|| EventStoreError::StorageEngineErrorOther("Couldn't retrieve last insert id.".to_string()))?
                         }
-                    };
-                    id
+                    }
                 }
             };
             tx.commit().await.map_err(|e| {
@@ -320,15 +320,15 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             let event_type: String = row.get(3);
             let data: String = row.get(4);
             let metadata: Option<String> = row.get(5);
-            let event = Event {
+            
+            Event {
                 aggregate_id,
                 aggregate_type,
                 version,
                 event_type,
                 data,
                 metadata,
-            };
-            event
+            }
         });
         Ok(events.collect())
     }
@@ -360,7 +360,7 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
 
                 let snapshot = Snapshot {
                     aggregate_id,
-                    aggregate_type: aggregate_type.to_string(),
+                    aggregate_type,
                     version,
                     data,
                 };
