@@ -5,23 +5,20 @@ pub struct PostgresqlBuilder;
 impl QueryBuilder for PostgresqlBuilder {
 
    fn build_queries(&self) -> Vec<String> {
-        let mut queries = Vec::new();
-
-        let q = "CREATE TABLE IF NOT EXISTS aggregate_types (
+        vec![
+        String::from("CREATE TABLE IF NOT EXISTS aggregate_types (
             id BIGSERIAL PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             UNIQUE(name)
-        );";
-        queries.push(q.to_string());
+        );"),
         
-        let q = "CREATE TABLE IF NOT EXISTS event_types (
+        String::from("CREATE TABLE IF NOT EXISTS event_types (
             id BIGSERIAL PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             UNIQUE(name)
-        );";
-        queries.push(q.to_string());
+        );"), 
 
-        let q = "CREATE TABLE IF NOT EXISTS aggregate_instances (
+        String::from("CREATE TABLE IF NOT EXISTS aggregate_instances (
             id BIGSERIAL PRIMARY KEY,
             aggregate_type_id BIGINT NOT NULL,
             natural_key VARCHAR(255),
@@ -29,10 +26,9 @@ impl QueryBuilder for PostgresqlBuilder {
             CONSTRAINT fk_aggregate_type_id
                 FOREIGN KEY(aggregate_type_id)
                     REFERENCES aggregate_types(id)
-        );";
-        queries.push(q.to_string());
+        );"),
 
-        let q = "CREATE TABLE IF NOT EXISTS events (
+        String::from("CREATE TABLE IF NOT EXISTS events (
             id BIGSERIAL PRIMARY KEY,
             aggregate_id BIGINT NOT NULL,
             aggregate_type_id BIGINT NOT NULL,
@@ -50,11 +46,8 @@ impl QueryBuilder for PostgresqlBuilder {
             CONSTRAINT fk_event_type_id
                 FOREIGN KEY(event_type_id)
                     REFERENCES event_types(id)
-        );";
-        queries.push(q.to_string());
-
-
-        let q = "CREATE TABLE IF NOT EXISTS snapshots (
+        );"),
+        String::from("CREATE TABLE IF NOT EXISTS snapshots (
             id BIGSERIAL PRIMARY KEY,
             aggregate_id BIGINT NOT NULL,
             aggregate_type_id BIGINT NOT NULL,
@@ -67,30 +60,18 @@ impl QueryBuilder for PostgresqlBuilder {
             CONSTRAINT fk_aggregate_type_id
                 FOREIGN KEY(aggregate_type_id)
                     REFERENCES aggregate_types(id)
-        );";
-        queries.push(q.to_string());
-        queries
+        );")
+        ]
     }
     
     fn drop_queries(&self) -> Vec<String> {
-        let mut queries = Vec::new();
-
-        let q = "DROP TABLE IF EXISTS snapshots;";
-        queries.push(q.to_string());
-
-        let q = "DROP TABLE IF EXISTS events;";
-        queries.push(q.to_string());
-
-        let q = "DROP TABLE IF EXISTS aggregate_instances;";
-        queries.push(q.to_string());
-
-        let q = "DROP TABLE IF EXISTS event_types;";
-        queries.push(q.to_string());
-
-        let q = "DROP TABLE IF EXISTS aggregate_types;";
-        queries.push(q.to_string());
-
-        queries
+        vec![
+            String::from("DROP TABLE IF EXISTS snapshots;"),
+            String::from("DROP TABLE IF EXISTS events;"),
+            String::from("DROP TABLE IF EXISTS aggregate_instances;"),
+            String::from("DROP TABLE IF EXISTS event_types;"),
+            String::from("DROP TABLE IF EXISTS aggregate_types;"),
+        ]
     }
     
     fn insert_event_type(&self) -> String {

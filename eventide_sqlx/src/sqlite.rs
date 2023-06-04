@@ -5,77 +5,56 @@ pub struct SqliteBuilder;
 
 impl QueryBuilder for SqliteBuilder {
     fn build_queries(&self) -> Vec<String> {
-        let mut queries = Vec::new();
-
-        let q = "CREATE TABLE IF NOT EXISTS aggregate_types (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            UNIQUE(name)
-        );";
-        queries.push(q.to_string());
-        
-        let q = "CREATE TABLE IF NOT EXISTS event_types (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            UNIQUE(name)
-        );";
-        queries.push(q.to_string());
-
-        let q = "CREATE TABLE IF NOT EXISTS aggregate_instances (
-            id INTEGER PRIMARY KEY,
-            aggregate_type_id INTEGER NOT NULL,
-            natural_key TEXT,
-            UNIQUE(aggregate_type_id, natural_key),
-            FOREIGN KEY(aggregate_type_id) REFERENCES aggregate_types(id)
-        );";
-        queries.push(q.to_string());
-
-        let q = "CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY,
-            aggregate_id INTEGER NOT NULL,
-            aggregate_type_id INTEGER NOT NULL,
-            version INTEGER NOT NULL,
-            event_type_id INTEGER NOT NULL,
-            data TEXT NOT NULL,
-            metadata TEXT,
-            UNIQUE(aggregate_id, version),
-            FOREIGN KEY(aggregate_id) REFERENCES aggregate_instances(id),
-            FOREIGN KEY(aggregate_type_id) REFERENCES aggregate_types(id),
-            FOREIGN KEY(event_type_id) REFERENCES event_types(id)
-        );";
-        queries.push(q.to_string());
-
-        let q = "CREATE TABLE IF NOT EXISTS snapshots (
-            id INTEGER PRIMARY KEY,
-            aggregate_id INTEGER NOT NULL,
-            aggregate_type_id INTEGER NOT NULL,
-            version INTEGER NOT NULL,
-            data TEXT NOT NULL,
-            FOREIGN KEY(aggregate_id) REFERENCES aggregate_instances(id),
-            FOREIGN KEY(aggregate_type_id) REFERENCES aggregate_types(id)
-        );";
-        queries.push(q.to_string());
-
-
-        queries
+        vec![
+            String::from("CREATE TABLE IF NOT EXISTS aggregate_types (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                UNIQUE(name)
+            );"),
+            String::from("CREATE TABLE IF NOT EXISTS event_types (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                UNIQUE(name)
+            );"),
+            String::from("CREATE TABLE IF NOT EXISTS aggregate_instances (
+                id INTEGER PRIMARY KEY,
+                aggregate_type_id INTEGER NOT NULL,
+                natural_key TEXT,
+                UNIQUE(aggregate_type_id, natural_key),
+                FOREIGN KEY(aggregate_type_id) REFERENCES aggregate_types(id)
+            );"),
+            String::from("CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY,
+                aggregate_id INTEGER NOT NULL,
+                aggregate_type_id INTEGER NOT NULL,
+                version INTEGER NOT NULL,
+                event_type_id INTEGER NOT NULL,
+                data TEXT NOT NULL,
+                metadata TEXT,
+                UNIQUE(aggregate_id, version),
+                FOREIGN KEY(aggregate_id) REFERENCES aggregate_instances(id),
+                FOREIGN KEY(aggregate_type_id) REFERENCES aggregate_types(id),
+                FOREIGN KEY(event_type_id) REFERENCES event_types(id)
+            );"),
+            String::from("CREATE TABLE IF NOT EXISTS snapshots (
+                id INTEGER PRIMARY KEY,
+                aggregate_id INTEGER NOT NULL,
+                aggregate_type_id INTEGER NOT NULL,
+                version INTEGER NOT NULL,
+                data TEXT NOT NULL,
+                FOREIGN KEY(aggregate_id) REFERENCES aggregate_instances(id),
+                FOREIGN KEY(aggregate_type_id) REFERENCES aggregate_types(id)
+            );"),
+        ]
     }
 
     fn drop_queries(&self) -> Vec<String> {
-        let mut queries = Vec::new();
-
-        let q = "DROP TABLE IF EXISTS events;";
-        queries.push(q.to_string());
-
-        let q = "DROP TABLE IF EXISTS aggregate_instances;";
-        queries.push(q.to_string());
-
-        let q = "DROP TABLE IF EXISTS event_types;";
-        queries.push(q.to_string());
-
-        let q = "DROP TABLE IF EXISTS aggregate_types;";
-        queries.push(q.to_string());
-
-        queries
+        vec![
+            String::from("DROP TABLE IF EXISTS events;"),
+            String::from("DROP TABLE IF EXISTS aggregate_instances;"),
+            String::from("DROP TABLE IF EXISTS event_types;"),
+            String::from("DROP TABLE IF EXISTS aggregate_types;"),
+        ]
     }
     
     fn insert_event_type(&self) -> String {

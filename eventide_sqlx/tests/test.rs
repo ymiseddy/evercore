@@ -9,12 +9,12 @@ use serde::{Serialize, Deserialize};
 // const DATABASE_TYPE: DbType = DbType::Postgres;
 
 // Sqlite - Note: Run with threads=1 or else you get a "database is locked" error
-//const DATABASE_URL: &str = "sqlite://test.db?mode=rwc";
-//const DATABASE_TYPE: DbType = DbType::Sqlite;
+const DATABASE_URL: &str = "sqlite://test.db?mode=rwc";
+const DATABASE_TYPE: DbType = DbType::Sqlite;
 
 // Mysql
-const DATABASE_URL: &str = "mysql://dbtest:dbtest@localhost/dbtest";
-const DATABASE_TYPE: DbType = DbType::Mysql;
+//const DATABASE_URL: &str = "mysql://dbtest:dbtest@localhost/dbtest";
+// const DATABASE_TYPE: DbType = DbType::Mysql;
 
 static mut INITIALIZED: Mutex<bool>  = Mutex::new(false);
 
