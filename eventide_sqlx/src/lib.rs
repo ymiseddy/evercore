@@ -114,10 +114,6 @@ impl SqlxStorageEngine {
             let id = match row {
                 Some(row) => {
                     let id: i64 = row.get(0);
-                    // Why are unsigned values not allowed?!?
-                    let id: i64 = id.try_into().map_err(|e| {
-                        EventStoreError::StorageEngineError(Box::new(e))
-                    })?;
                     id
                 },
                 None => {
@@ -182,10 +178,6 @@ impl SqlxStorageEngine {
             let id = match row {
                 Some(row) => {
                     let id: i64 = row.get(0);
-                    // Why are unsigned values not allowed?!?
-                    let id: i64 = id.try_into().map_err(|e| {
-                        EventStoreError::StorageEngineError(Box::new(e))
-                    })?;
                     id
                 },
                 None => {
@@ -386,12 +378,7 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             let event_type_id = self.get_event_type_id(&event.event_type).await?;
             let aggregate_type_id = self.get_aggregate_type_id(&event.aggregate_type).await?;
 
-            let aggregate_id: i64 = event.aggregate_id.try_into().map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
-            let version: i64 = event.version.try_into().map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+            let aggregate_id: i64 = event.aggregate_id;            let version: i64 = event.version;
 
             sqlx::query(&self.query_builder.insert_event())
                 .bind(aggregate_id)
@@ -411,10 +398,7 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
         for snapshot in _snapshots {
             let aggregate_type_id = self.get_aggregate_type_id(&snapshot.aggregate_type).await?;
 
-            let aggregate_id: i64 = snapshot.aggregate_id.try_into().map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
-
+            let aggregate_id: i64 = snapshot.aggregate_id;
             sqlx::query(&self.query_builder.insert_snapshot())
                 .bind(aggregate_id)
                 .bind(aggregate_type_id)

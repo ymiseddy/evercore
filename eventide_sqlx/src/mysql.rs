@@ -4,22 +4,20 @@ pub(crate) struct MysqlBuilder;
 
 impl QueryBuilder for MysqlBuilder {
     fn build_queries(&self) -> Vec<String> {
-        let mut queries = Vec::new();
-        queries.push(String::from("CREATE TABLE IF NOT EXISTS aggregate_types (
-            id BIGINT NOT NULL AUTO_INCREMENT,
-            name VARCHAR(255) NOT NULL,
-            PRIMARY KEY (id),
-            UNIQUE KEY (name)
-        )"));
-
-        queries.push(String::from("CREATE TABLE IF NOT EXISTS event_types (
-            id BIGINT NOT NULL AUTO_INCREMENT,
-            name VARCHAR(255) NOT NULL,
-            PRIMARY KEY (id),
-            UNIQUE KEY (name)
-        )"));
-
-        queries.push(String::from("CREATE TABLE IF NOT EXISTS aggregate_instance (
+        vec![
+            String::from("CREATE TABLE IF NOT EXISTS aggregate_types (
+                id BIGINT NOT NULL AUTO_INCREMENT,
+                name VARCHAR(255) NOT NULL,
+                PRIMARY KEY (id),
+                UNIQUE KEY (name)
+            )"),
+            String::from("CREATE TABLE IF NOT EXISTS event_types (
+                id BIGINT NOT NULL AUTO_INCREMENT,
+                name VARCHAR(255) NOT NULL,
+                PRIMARY KEY (id),
+                UNIQUE KEY (name)
+            )"),
+        String::from("CREATE TABLE IF NOT EXISTS aggregate_instance (
             id BIGINT NOT NULL AUTO_INCREMENT,
             aggregate_type_id BIGINT NOT NULL,
             natural_key VARCHAR(255),
@@ -28,9 +26,9 @@ impl QueryBuilder for MysqlBuilder {
             CONSTRAINT fk_aggregate_instance_aggregate_type_id
                 FOREIGN KEY(aggregate_type_id)
                     REFERENCES aggregate_types(id)
-        )"));
+        )"),
 
-        queries.push(String::from("CREATE TABLE IF NOT EXISTS events (
+        String::from("CREATE TABLE IF NOT EXISTS events (
             id BIGINT NOT NULL AUTO_INCREMENT,
             aggregate_id BIGINT NOT NULL,
             aggregate_type_id BIGINT NOT NULL,
@@ -49,9 +47,9 @@ impl QueryBuilder for MysqlBuilder {
             CONSTRAINT fk_event_type_id
                 FOREIGN KEY(event_type_id)
                     REFERENCES event_types(id)
-        )"));
+        )"),
 
-        queries.push(String::from("CREATE TABLE IF NOT EXISTS snapshots (
+        String::from("CREATE TABLE IF NOT EXISTS snapshots (
             id BIGINT NOT NULL AUTO_INCREMENT,
             aggregate_id BIGINT NOT NULL,
             aggregate_type_id BIGINT NOT NULL,
@@ -65,19 +63,18 @@ impl QueryBuilder for MysqlBuilder {
             CONSTRAINT fk_snapshot_aggregate_type_id
                 FOREIGN KEY(aggregate_type_id)
                     REFERENCES aggregate_types(id)
-        )"));
-
-        queries
+        )"),
+        ]
     }
 
     fn drop_queries(&self) -> Vec<String> {
-        let mut queries = Vec::new();
-        queries.push(String::from("DROP TABLE IF EXISTS snapshots"));
-        queries.push(String::from("DROP TABLE IF EXISTS events"));
-        queries.push(String::from("DROP TABLE IF EXISTS aggregate_instance"));
-        queries.push(String::from("DROP TABLE IF EXISTS aggregate_types"));
-        queries.push(String::from("DROP TABLE IF EXISTS event_types"));
-        queries
+        vec![
+            String::from("DROP TABLE IF EXISTS snapshots"),
+            String::from("DROP TABLE IF EXISTS events"),
+            String::from("DROP TABLE IF EXISTS aggregate_instance"),
+            String::from("DROP TABLE IF EXISTS aggregate_types"),
+            String::from("DROP TABLE IF EXISTS event_types"),
+        ] 
     }
 
     fn insert_event_type(&self) -> String {
