@@ -50,7 +50,7 @@ impl Default for MemoryStorageEngine {
 #[async_trait::async_trait]
 impl EventStoreStorageEngine for MemoryStorageEngine {
 
-    async fn next_aggregate_id(&self, _aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError> {
+    async fn create_aggregate_instance(&self, _aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError> {
         let mut memory_store = self.memory_store.lock().unwrap();
         memory_store.id += 1;
         let id = memory_store.id;
@@ -60,6 +60,15 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
         }
 
         Ok(id)
+    }
+
+    async fn get_aggregate_instance_id(&self, _aggregate_type: &str, natural_key: &str) -> Result<Option<i64>, EventStoreError> {
+        let memory_store = self.memory_store.lock().unwrap();
+        let id = memory_store.natural_key_map.get(natural_key);
+        match id {
+            Some(id) => Ok(Some(*id)),
+            None => Ok(None)
+        }
     }
 
     async fn get_events(

@@ -12,3 +12,6 @@ eventide = { version = "0.1.0", path="../eventide", features=[] }
 rusqlite = "0.29.0"
 thiserror = "1.0.40"
 
+[dev-dependencies]
+tokio = "1.28.2"
+

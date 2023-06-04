@@ -1,233 +1,38 @@
 #[forbid(unsafe_code)]
 
+mod pg;
+mod sqlite;
+mod mysql;
+mod queries;
+
+use crate::queries::QueryBuilder;
 use std::{collections::HashMap, sync::Arc};
 use futures::lock::Mutex;
 use eventide::{event::Event, snapshot::Snapshot, EventStoreError, EventStoreStorageEngine};
-use sqlx::{AnyPool, pool::PoolConnection, Row};
+use sqlx::{AnyPool, pool::PoolConnection, Row, Connection};
+use pg::PostgresqlBuilder;
+use sqlite::SqliteBuilder;
+use mysql::MysqlBuilder;
 
 pub enum DbType {
     Sqlite,
     Postgres,
-    // Mysql,
-}
-
-struct PostgresqlBuilder;
-
-trait QueryBuilder {
-    fn build_queries(&self) -> Vec<String>;
-    fn insert_or_get_aggregate_type(&self) -> String;
-    fn insert_or_get_event_type(&self) -> String;
-    fn insert_aggregate_instance(&self) -> String;
-    fn insert_event(&self) -> String;
-    fn insert_snapshot(&self) -> String;
-    fn get_events(&self) -> String;
-    fn get_snapshot(&self) -> String;
+    Mysql,
 }
 
 
-impl QueryBuilder for PostgresqlBuilder {
 
-   fn build_queries(&self) -> Vec<String> {
-        let mut queries = Vec::new();
-
-        let q = "CREATE TABLE IF NOT EXISTS aggregate_types (
-            id BIGSERIAL PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            UNIQUE(name)
-        );";
-        queries.push(q.to_string());
-        
-        let q = "CREATE TABLE IF NOT EXISTS event_types (
-            id BIGSERIAL PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            UNIQUE(name)
-        );";
-        queries.push(q.to_string());
-
-        let q = "CREATE TABLE IF NOT EXISTS aggregate_instances (
-            id BIGSERIAL PRIMARY KEY,
-            aggregate_type_id BIGINT NOT NULL,
-            natural_key VARCHAR(255),
-            UNIQUE(aggregate_type_id, natural_key),
-            CONSTRAINT fk_aggregate_type_id
-                FOREIGN KEY(aggregate_type_id)
-                    REFERENCES aggregate_types(id)
-        );";
-        queries.push(q.to_string());
-
-        let q = "CREATE TABLE IF NOT EXISTS events (
-            id BIGSERIAL PRIMARY KEY,
-            aggregate_id BIGINT NOT NULL,
-            aggregate_type_id BIGINT NOT NULL,
-            version BIGINT NOT NULL,
-            event_type_id BIGINT NOT NULL,
-            data JSONB NOT NULL,
-            metadata JSONB,
-            UNIQUE(aggregate_id, version),
-            CONSTRAINT fk_aggregate_id
-                FOREIGN KEY(aggregate_id)
-                    REFERENCES aggregate_instances(id),
-            CONSTRAINT fk_aggregate_type_id
-                FOREIGN KEY(aggregate_type_id)
-                    REFERENCES aggregate_types(id),
-            CONSTRAINT fk_event_type_id
-                FOREIGN KEY(event_type_id)
-                    REFERENCES event_types(id)
-        );";
-        queries.push(q.to_string());
-
-
-        let q = "CREATE TABLE IF NOT EXISTS snapshots (
-            id BIGSERIAL PRIMARY KEY,
-            aggregate_id BIGINT NOT NULL,
-            aggregate_type_id BIGINT NOT NULL,
-            version BIGINT NOT NULL,
-            data JSONB NOT NULL,
-            UNIQUE(aggregate_id, version),
-            CONSTRAINT fk_aggregate_id
-                FOREIGN KEY(aggregate_id)
-                    REFERENCES aggregate_instances(id),
-            CONSTRAINT fk_aggregate_type_id
-                FOREIGN KEY(aggregate_type_id)
-                    REFERENCES aggregate_types(id)
-        );";
-        queries.push(q.to_string());
-        queries
-    }
-
-    fn insert_or_get_aggregate_type(&self) -> String {
-        // Select or insert the aggregate type.
-        "INSERT INTO aggregate_types (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = $1 RETURNING id;"
-        .to_string()
-    }
-
-    fn insert_or_get_event_type(&self) -> String {
-        // Select or insert the event type.
-        "INSERT INTO event_types (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = $1 RETURNING id;"
-        .to_string()
-    }
-
-    fn insert_aggregate_instance(&self) -> String {
-        "INSERT INTO aggregate_instances (aggregate_type_id, natural_key) VALUES ($1, $2) RETURNING id;"
-        .to_string()
-    }
-
-    fn insert_event(&self) -> String {
-        "INSERT INTO events (aggregate_id, aggregate_type_id, version, event_type_id, data, metadata) VALUES ($1, $2, $3, $4, $5, $6)"
-        .to_string()
-    }
-
-    fn insert_snapshot(&self) -> String {
-        "INSERT INTO snapshots (aggregate_id, aggregate_type_id, version, data) VALUES ($1, $2, $3, $4)"
-        .to_string()
-    }
-
-    fn get_events(&self) -> String {
-        "SELECT id, aggregate_id, aggregate_type_id, version, event_type_id, data, metadata FROM events WHERE aggregate_id = $1 AND version > $2 ORDER BY version ASC;"
-        .to_string()
-    }
-
-    fn get_snapshot(&self) -> String {
-        "SELECT id, aggregate_id, aggregate_type_id, version, data FROM snapshots WHERE aggregate_id = $1 ORDER BY version DESC LIMIT 1;"
-        .to_string()
-    }
-
-}
-
-
-struct SqliteBuilder;
-
-impl QueryBuilder for SqliteBuilder {
-    fn build_queries(&self) -> Vec<String> {
-        let mut queries = Vec::new();
-
-        let q = "CREATE TABLE IF NOT EXISTS aggregate_types (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            UNIQUE(name)
-        );";
-        queries.push(q.to_string());
-        
-        let q = "CREATE TABLE IF NOT EXISTS event_types (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            UNIQUE(name)
-        );";
-        queries.push(q.to_string());
-
-        let q = "CREATE TABLE IF NOT EXISTS aggregate_instances (
-            id INTEGER PRIMARY KEY,
-            aggregate_type_id INTEGER NOT NULL,
-            natural_key TEXT,
-            UNIQUE(aggregate_type_id, natural_key),
-            FOREIGN KEY(aggregate_type_id) REFERENCES aggregate_types(id)
-        );";
-        queries.push(q.to_string());
-
-        let q = "CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY,
-            aggregate_id INTEGER NOT NULL,
-            aggregate_type_id INTEGER NOT NULL,
-            version INTEGER NOT NULL,
-            event_type_id INTEGER NOT NULL,
-            data TEXT NOT NULL,
-            metadata TEXT,
-            UNIQUE(aggregate_id, version),
-            FOREIGN KEY(aggregate_id) REFERENCES aggregate_instances(id),
-            FOREIGN KEY(aggregate_type_id) REFERENCES aggregate_types(id),
-            FOREIGN KEY(event_type_id) REFERENCES event_types(id)
-        );";
-        queries.push(q.to_string());
-        queries
-    }
-
-    fn insert_or_get_aggregate_type(&self) -> String {
-        "INSERT INTO aggregate_types (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = $1 RETURNING id;"
-        .to_string()
-    }
-
-    fn insert_or_get_event_type(&self) -> String {
-        "INSERT INTO event_types (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = $1 RETURNING id;"
-        .to_string()
-    }
-
-    fn insert_aggregate_instance(&self) -> String {
-        "INSERT INTO aggregate_instances (aggregate_type_id, natural_key) VALUES ($1, $2) RETURNING id;"
-        .to_string()
-    }
-
-    fn insert_event(&self) -> String {
-        "INSERT INTO events (aggregate_id, aggregate_type_id, version, event_type_id, data, metadata) VALUES ($1, $2, $3, $4, $5, $6)"
-        .to_string()
-    }
-
-    fn insert_snapshot(&self) -> String {
-        "INSERT INTO snapshots (aggregate_id, aggregate_type_id, version, data) VALUES ($1, $2, $3, $4)"
-        .to_string()
-    }
-
-    fn get_events(&self) -> String {
-        "SELECT id, aggregate_id, aggregate_type_id, version, event_type_id, data, metadata FROM events WHERE aggregate_id = $1 AND version > $2 ORDER BY version ASC;"
-        .to_string()
-    }
-
-    fn get_snapshot(&self) -> String {
-        "SELECT id, aggregate_id, aggregate_type_id, version, data FROM snapshots WHERE aggregate_id = $1 ORDER BY version DESC LIMIT 1;"
-        .to_string()
-    }
-
-}
 
 pub struct SqlxStorageEngine {
-    dbtype: DbType,
     pool: sqlx::AnyPool,
     aggregate_types: Arc<Mutex<HashMap<String, i64>>>,
     event_types: Arc<Mutex<HashMap<String, i64>>>,
     query_builder: Arc<dyn QueryBuilder + Send + Sync>,
+    dbtype: DbType,
 }
 
 impl SqlxStorageEngine {
-/// Creates a new SqlxStorageEngine.
+    /// Creates a new SqlxStorageEngine.
     pub async fn new(dbtype: DbType, connection: &str) -> Result<SqlxStorageEngine, EventStoreError> {
         let pool = AnyPool::connect(connection).await.map_err(|e| {
             EventStoreError::StorageEngineError(Box::new(e))
@@ -242,15 +47,16 @@ impl SqlxStorageEngine {
         let query_builder: Arc<dyn QueryBuilder + Send + Sync> = match dbtype {
             DbType::Postgres => Arc::new(PostgresqlBuilder),
             DbType::Sqlite => Arc::new(SqliteBuilder),
+            DbType::Mysql => Arc::new(MysqlBuilder),
         };
 
 
         Ok(SqlxStorageEngine {
-            dbtype,
             pool,
             event_types,
             aggregate_types,
             query_builder,
+            dbtype,
         })
     }
 
@@ -262,10 +68,23 @@ impl SqlxStorageEngine {
             Ok(connection)
     }
 
+
     /// Can be called to build the database schema.
     pub async fn build(&self) -> Result<(), EventStoreError> {
         let mut connection = self.get_connection().await?; 
+
         let queries = self.query_builder.build_queries();
+        for query in queries {
+            sqlx::query(&query).execute(&mut connection).await.map_err(|e| {
+                EventStoreError::StorageEngineError(Box::new(e))
+            })?;
+        }
+        Ok(())
+    }
+
+    pub async fn drop(&self) -> Result<(), EventStoreError> {
+        let mut connection = self.get_connection().await?; 
+        let queries = self.query_builder.drop_queries();
         for query in queries {
             sqlx::query(&query).execute(&mut connection).await.map_err(|e| {
                 EventStoreError::StorageEngineError(Box::new(e))
@@ -281,21 +100,63 @@ impl SqlxStorageEngine {
         }
 
         let mut connection = self.get_connection().await?;
-        let row = sqlx::query(&self.query_builder.insert_or_get_aggregate_type())
+        let mut tx = connection.begin()
+            .await.map_err(|e| {
+                EventStoreError::StorageEngineError(Box::new(e))
+            })?;
+
+        let query = self.query_builder.get_aggregate_type();
+        let row = sqlx::query(&query)
             .bind(aggregate_type)
-            .fetch_one(&mut connection)
+            .fetch_optional(&mut tx)
             .await
             .map_err(|e| {
                 EventStoreError::StorageEngineError(Box::new(e))
             })?;
 
-        let id: i64 = row.get(0);
+            let id = match row {
+                Some(row) => {
+                    let id: i64 = row.get(0);
+                    // Why are unsigned values not allowed?!?
+                    let id: i64 = id.try_into().map_err(|e| {
+                        EventStoreError::StorageEngineError(Box::new(e))
+                    })?;
+                    id
+                },
+                None => {
+                    let query = self.query_builder.insert_aggregate_type();
+                    let query = sqlx::query(&query)
+                        .bind(aggregate_type);
 
-        // Why are unsigned values not allowed?!?
-        let id: i64 = id.try_into().map_err(|e| {
-            EventStoreError::StorageEngineError(Box::new(e))
-        })?;
-        aggregate_types.insert(aggregate_type.to_string(), id);
+                    let id = match &self.dbtype {
+                        DbType::Postgres => {
+                            let result = query
+                                .fetch_one(&mut tx)
+                                .await
+                                .map_err(|e| {
+                                    EventStoreError::StorageEngineError(Box::new(e))
+                                })?;
+                            result.get(0)
+                        },
+                        _ => {
+                            let result = query.execute(&mut tx)
+                                .await
+                                .map_err(|e| {
+                                    EventStoreError::StorageEngineError(Box::new(e))
+                                })?;
+
+                            result.last_insert_id()
+                                .ok_or_else(|| EventStoreError::StorageEngineErrorOther("Couldn't retrieve last insert id.".to_string()))?
+                        }
+                    };
+                    id
+                }
+            };
+            tx.commit().await.map_err(|e| {
+                EventStoreError::StorageEngineError(Box::new(e))
+            })?;
+            aggregate_types.insert(aggregate_type.to_string(), id);
+
         Ok(id)
     }
     
@@ -306,29 +167,71 @@ impl SqlxStorageEngine {
         }
 
         let mut connection = self.get_connection().await?;
-        let row = sqlx::query(&self.query_builder.insert_or_get_event_type())
+        let mut tx = connection.begin()
+            .await.map_err(|e| {
+                EventStoreError::StorageEngineError(Box::new(e))
+            })?;
+
+        let query = self.query_builder.get_event_type();
+
+        let row = sqlx::query(&query)
             .bind(event_type)
-            .fetch_one(&mut connection)
+            .fetch_optional(&mut tx)
             .await
             .map_err(|e| {
                 EventStoreError::StorageEngineError(Box::new(e))
             })?;
 
-        let id: i64 = row.get(0);
+            let id = match row {
+                Some(row) => {
+                    let id: i64 = row.get(0);
+                    // Why are unsigned values not allowed?!?
+                    let id: i64 = id.try_into().map_err(|e| {
+                        EventStoreError::StorageEngineError(Box::new(e))
+                    })?;
+                    id
+                },
+                None => {
+                    let query = self.query_builder.insert_event_type();
+                    let query = sqlx::query(&query)
+                        .bind(event_type);
 
-        // Why are unsigned values not allowed?!?
-        let id: i64 = id.try_into().map_err(|e| {
-            EventStoreError::StorageEngineError(Box::new(e))
-        })?;
-        event_types.insert(event_type.to_string(), id);
-        Ok(id)
+                    let id = match &self.dbtype {
+                        DbType::Postgres => {
+                            let result = query
+                                .fetch_one(&mut tx)
+                                .await
+                                .map_err(|e| {
+                                    EventStoreError::StorageEngineError(Box::new(e))
+                                })?;
+                            result.get(0)
+                        },
+                        _ => {
+                            let result = query.execute(&mut tx)
+                                .await
+                                .map_err(|e| {
+                                    EventStoreError::StorageEngineError(Box::new(e))
+                                })?;
+
+                            result.last_insert_id()
+                                .ok_or_else(|| EventStoreError::StorageEngineErrorOther("Couldn't retrieve last insert id.".to_string()))?
+                        }
+                    };
+                    id
+                }
+            };
+            tx.commit().await.map_err(|e| {
+                EventStoreError::StorageEngineError(Box::new(e))
+            })?;
+            event_types.insert(event_type.to_string(), id);
+            Ok(id)
     }
 }
 
 
 #[async_trait::async_trait]
 impl EventStoreStorageEngine for SqlxStorageEngine {
-    async fn next_aggregate_id(
+    async fn create_aggregate_instance(
         &self, 
         aggregate_type: &str, 
         natural_key: Option<&str>
@@ -336,23 +239,61 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
 
         let aggregate_type_id = self.get_aggregate_type_id(aggregate_type).await?;
 
-        println!("aggregate_type_id: {}", aggregate_type_id);
         let query = self.query_builder.insert_aggregate_instance();
-        println!("query: {}", query);
 
+        let mut connection = self.get_connection().await?;
+        let query = sqlx::query(&query)
+            .bind(aggregate_type_id)
+            .bind(natural_key);
+
+            let id = match &self.dbtype {
+                DbType::Postgres => {
+                    let result = query
+                        .fetch_one(&mut connection)
+                        .await
+                        .map_err(|e| {
+                            EventStoreError::StorageEngineError(Box::new(e))
+                        })?;
+                    result.get(0)
+                },
+                _ => {
+                    let result = query.execute(&mut connection)
+                        .await
+                        .map_err(|e| {
+                            EventStoreError::StorageEngineError(Box::new(e))
+                        })?;
+
+                      result.last_insert_id()
+                        .ok_or_else(|| EventStoreError::StorageEngineErrorOther("Couldn't retrieve last insert id.".to_string()))?
+                }
+            };
+        Ok(id)
+    }
+
+    async fn get_aggregate_instance_id(
+        &self, 
+        aggregate_type: &str, 
+        natural_key: &str
+    ) -> Result<Option<i64>, EventStoreError> {
+        let aggregate_type_id = self.get_aggregate_type_id(aggregate_type).await?;
+        let query = self.query_builder.get_aggregate_instance_id();
 
         let mut connection = self.get_connection().await?;
         let row = sqlx::query(&query)
             .bind(aggregate_type_id)
             .bind(natural_key)
-            .fetch_one(&mut connection)
+            .fetch_optional(&mut connection)
             .await
             .map_err(|e| {
                 EventStoreError::StorageEngineError(Box::new(e))
             })?;
 
-        let id: i64 = row.get(0);
-        Ok(id)
+        if let Some(row) = row {
+            let id: i64 = row.get(0);
+            Ok(Some(id))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn get_events(
