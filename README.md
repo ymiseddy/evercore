@@ -1,5 +1,5 @@
 # Eventide - An event sourcing library in Rust.
-<div style="align:center">
+<div align="center">
 
 ![Test Coverage](https://ymiseddy.github.io/eventide/badges/coverage.svg)
 ![Build](https://ymiseddy.github.io/eventide/badges/build.svg)
