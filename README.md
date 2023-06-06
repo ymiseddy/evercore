@@ -3,7 +3,7 @@
 
 ![Test Coverage](https://ymiseddy.github.io/eventide/badges/coverage.svg)
 ![Build](https://ymiseddy.github.io/eventide/badges/build.svg)
-![Build](https://ymiseddy.github.io/eventide/badges/coverage.svg)
+![Code/comments](https://ymiseddy.github.io/eventide/badges/slocc.svg)
 
 </div>
 
