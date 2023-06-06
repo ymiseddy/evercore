@@ -7,9 +7,9 @@
 
 </div>
 
-# This project is a work in progress - not ready for prime time.
+## This project is a work in progress - not ready for prime time.
 
-# TODO List:
+## TODO List:
 - [X] Snapshoting
     - Implement on EventContext + sane way to determine frequency 
 - [X] Implement database backends for
