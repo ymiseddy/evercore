@@ -1,4 +1,4 @@
-# Eventide - An event sourcing library in Rust.
+# Eventide
 <div align="center">
 
 ![Build](https://seddy.com/cicd/x339z/build.svg)
@@ -8,9 +8,11 @@
 
 </div>
 
-# This project is a work in progress - not ready for prime time.
+An event sourcing library in Rust.
 
-# TODO List:
+## This project is a work in progress - not ready for prime time.
+
+## TODO List:
 - [X] Snapshoting
     - Implement on EventContext + sane way to determine frequency 
 - [X] Implement database backends for
