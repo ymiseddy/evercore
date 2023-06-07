@@ -1,10 +1,10 @@
 # Eventide
 <div align="center">
 
-![Build](https://seddy.com/cicd/x339z/build.svg?)
-![Code](https://seddy.com/cicd/x339z/code.svg?)
-![Test Coverage](https://seddy.com/cicd/x339z/coverage.svg?)
-![Awesomeness](https://seddy.com/cicd/x339z/awesome.svg?)
+![Build](https://seddy.com/cicd/x339z/build.svg?kill_cache=1)
+![Code](https://seddy.com/cicd/x339z/code.svg??kill_cache=1)
+![Test Coverage](https://seddy.com/cicd/x339z/coverage.svg??kill_cache=1)
+![Awesomeness](https://seddy.com/cicd/x339z/awesome.svg??kill_cache=1)
 
 </div>
 
