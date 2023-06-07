@@ -114,3 +114,97 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
     }
 
 }
+
+#[cfg(test)]
+mod tests {
+    use serde::{Serialize, Deserialize};
+
+    use super::*;
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct UserCreate {
+        name: String,
+        email: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct Context {
+        user_id: i32,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    struct UserState {
+        name: String,
+        email: String,
+    }
+
+
+    #[tokio::test]
+    async fn ensure_create_aggregate() {
+        let storage_engine = MemoryStorageEngine::new();
+        let aggregate_type = "test";
+        let natural_key = "test";
+        let id = storage_engine.create_aggregate_instance(aggregate_type, Some(natural_key)).await.unwrap();
+        assert_eq!(id, 1);
+    }
+
+    #[tokio::test]
+    async fn ensure_can_get_aggregate_instance_id() {
+        let storage_engine = MemoryStorageEngine::new();
+        let aggregate_type = "test";
+        let natural_key = "test";
+        storage_engine.create_aggregate_instance(aggregate_type, Some(natural_key)).await.unwrap();
+
+        let id = storage_engine.get_aggregate_instance_id(aggregate_type, natural_key).await.unwrap().unwrap();
+        assert_eq!(id, 1);
+    }
+
+    #[tokio::test]
+    async fn ensure_can_write_events() {
+        let event_data = UserCreate {
+            name: "test".to_string(),
+            email: "rtest@example.com".to_string(),
+        };
+
+        let event = Event::new(1, "test", 1, "created", &event_data).unwrap();
+        
+        let state = UserState {
+            name: "test".to_string(),
+            email: "rtest@example.com".to_string(),
+        };
+        let snapshot = Snapshot::new(1, "test", 1, &state).unwrap();
+
+        let storage_engine = MemoryStorageEngine::new();
+        storage_engine.write_updates(&[event.clone()], &[snapshot.clone()]).await.unwrap();
+
+        let events = storage_engine.get_events(1, "test", 0).await.unwrap();
+        let retrieved_snapshot = storage_engine.get_snapshot(1, "test").await.unwrap().unwrap();
+
+        assert_eq!(events[0].data, event.data);
+        assert_eq!(events[0].aggregate_id, 1);
+        assert_eq!(events[0].event_type, "created");
+        assert_eq!(events[0].version, 1);
+
+        assert_eq!(retrieved_snapshot.data, snapshot.data);
+        assert_eq!(retrieved_snapshot.aggregate_id, 1);
+        assert_eq!(retrieved_snapshot.aggregate_type, "test");
+        assert_eq!(retrieved_snapshot.version, 1);
+
+
+    }
+    
+    #[tokio::test]
+    async fn ensure_missing_aggregate_instance_retrieval_returns_none() {
+        let storage_engine = MemoryStorageEngine::new();
+        let result = storage_engine.get_aggregate_instance_id("test", "test").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn ensure_missing_snapshot_returns_none() {
+        let storage_engine = MemoryStorageEngine::default();
+        let retrieved_snapshot = storage_engine.get_snapshot(1, "test").await.unwrap();
+        assert!(retrieved_snapshot.is_none());
+    }
+
+}

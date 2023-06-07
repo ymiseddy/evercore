@@ -19,3 +19,10 @@ containers/
 cargo-test*
 test.db
 lcov.info
+
+target_cov/
+tarpaulin-report.html
+
+# Ignore helper scripts
+build.sh
+test.sh
