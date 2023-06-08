@@ -2,5 +2,4 @@
 members = [
     "eventide",
     "eventide_sqlx",
-    "scratch"
 ]
