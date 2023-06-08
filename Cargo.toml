@@ -1,5 +1,5 @@
 [workspace]
 members = [
-    "eventide",
-    "eventide_sqlx",
+    "evercore",
+    "evercore_sqlx",
 ]

@@ -1,7 +1,7 @@
-use eventide::{EventStoreStorageEngine, event::Event, snapshot::Snapshot};
-use eventide_sqlx::SqlxStorageEngine;
+use evercore::{EventStoreStorageEngine, event::Event, snapshot::Snapshot};
+use evercore_sqlx::SqlxStorageEngine;
 use serde::{Serialize, Deserialize};
-use eventide_sqlx::DbType;
+use evercore_sqlx::DbType;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct UserCreate {

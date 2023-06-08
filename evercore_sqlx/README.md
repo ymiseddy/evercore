@@ -1,5 +1,5 @@
-# eventide-sqlx 
-This crate provides an sqlx pool based storage engine for eventide.
+# evercore_sqlx 
+This crate provides an sqlx pool based storage engine for evercore.
 
 ## Running tests
 

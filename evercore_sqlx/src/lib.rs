@@ -5,7 +5,7 @@ mod queries;
 mod sqlite;
 
 use crate::queries::QueryBuilder;
-use eventide::{event::Event, snapshot::Snapshot, EventStoreError, EventStoreStorageEngine};
+use evercore::{event::Event, snapshot::Snapshot, EventStoreError, EventStoreStorageEngine};
 use futures::lock::Mutex;
 use mysql::MysqlBuilder;
 use pg::PostgresqlBuilder;

@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 mod common;
-use eventide_sqlx::{SqlxStorageEngine, DbType};
+use evercore_sqlx::{SqlxStorageEngine, DbType};
 use sqlx::AnyPool;
 
 // Mysql

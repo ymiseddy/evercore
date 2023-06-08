@@ -1,5 +1,5 @@
 [package]
-name = "eventide-sqlx"
+name = "evercore_sqlx"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.68"
 chrono = "0.4.25"
-eventide = { version = "0.1.0", path="../eventide", features=[] }
+evercore = { version = "0.1.0", path="../evercore", features=[] }
 thiserror = "1.0.40"
 sqlx = { version = "0.6.3", features = ["runtime-tokio-native-tls", "any", "all"] }
 futures = "0.3.28"
