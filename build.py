@@ -19,10 +19,10 @@ colors = {
 
 
 coverage_colors = [
-    {"target": 60, "color":  colors["red"]},
-    {"target": 70, "color":  colors["orange"]},
-    {"target": 80, "color":  colors["yellow"]},
     {"target": 90, "color":  colors["green"]},
+    {"target": 80, "color":  colors["yellow"]},
+    {"target": 70, "color":  colors["orange"]},
+    {"target": 60, "color":  colors["red"]},
 ]
 
 
@@ -156,13 +156,10 @@ if __name__ == '__main__':
         branch = sys.argv[1]
 
     try:
-        # checkout(branch)
-        # test()
-        # slocc()
-        # build()
-
-        os.chdir(branch)
-
+        checkout(branch)
+        test()
+        slocc()
+        build()
         stats = get_stats()
         make_badges(stats)
     except Exception:
