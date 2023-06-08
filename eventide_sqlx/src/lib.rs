@@ -280,7 +280,7 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
         }
     }
 
-    async fn get_events(
+    async fn read_events(
         &self,
         aggregate_id: i64,
         aggregate_type: &str,
@@ -320,7 +320,7 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
         Ok(events.collect())
     }
 
-    async fn get_snapshot(
+    async fn read_snapshot(
         &self,
         aggregate_id: i64,
         aggregate_type: &str,

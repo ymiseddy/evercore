@@ -86,7 +86,7 @@ pub async fn can_write_updates(dbtype: DbType, pool: sqlx::AnyPool) {
 
 
     let mut event = Event::new(aggregate_instance, "user", 1, "created", &user_created).unwrap();
-    event.set_metadata(&context).unwrap();
+    event.add_metadata(&context).unwrap();
     let events = vec![event];
 
     let user_state = UserState {
@@ -99,7 +99,7 @@ pub async fn can_write_updates(dbtype: DbType, pool: sqlx::AnyPool) {
     let snapshots: Vec<Snapshot> = vec![snapshot];
     storage.write_updates(&events, &snapshots).await.unwrap();
 
-    let new_events = storage.get_events(aggregate_instance, "user", 0).await.unwrap();
+    let new_events = storage.read_events(aggregate_instance, "user", 0).await.unwrap();
 
     assert_eq!(new_events.len(), 1);
     assert_eq!(new_events[0].aggregate_id, events[0].aggregate_id);
@@ -110,7 +110,7 @@ pub async fn can_write_updates(dbtype: DbType, pool: sqlx::AnyPool) {
     assert_eq!(new_events[0].metadata, events[0].metadata);
 
 
-    let new_snapshot = storage.get_snapshot(aggregate_instance, "user").await.unwrap()
+    let new_snapshot = storage.read_snapshot(aggregate_instance, "user").await.unwrap()
         .unwrap();
 
     assert_eq!(new_snapshot.aggregate_id, snapshots[0].aggregate_id);

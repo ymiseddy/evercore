@@ -22,14 +22,14 @@ pub trait EventStoreStorageEngine {
     async fn create_aggregate_instance(&self, aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError>;
     async fn get_aggregate_instance_id(&self, aggregate_type: &str, natural_key: &str) -> Result<Option<i64>, EventStoreError>;
 
-    async fn get_events(
+    async fn read_events(
         &self,
         aggregate_id: i64,
         aggregate_type: &str,
         version: i64,
     ) -> Result<Vec<Event>, EventStoreError>;
 
-    async fn get_snapshot(
+    async fn read_snapshot(
         &self,
         aggregate_id: i64,
         aggregate_type: &str,
@@ -61,7 +61,7 @@ impl EventStore {
         aggregate_type: &str,
         version: i64,
     ) -> Result<Vec<Event>, EventStoreError> {
-        self.storage_engine.get_events(aggregate_id, aggregate_type, version).await
+        self.storage_engine.read_events(aggregate_id, aggregate_type, version).await
     }
 
     pub async fn get_snapshot(
@@ -69,7 +69,7 @@ impl EventStore {
         aggregate_id: i64,
         aggregate_type: &str,
     ) -> Result<Option<Snapshot>, EventStoreError> {
-        self.storage_engine.get_snapshot(aggregate_id, aggregate_type).await
+        self.storage_engine.read_snapshot(aggregate_id, aggregate_type).await
     }
 
     pub async fn write_updates(&self, events: &[Event], snapshots: &[Snapshot]) -> Result<(), EventStoreError> {
@@ -150,11 +150,9 @@ pub enum EventStoreError {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
+    use std::{sync::Arc, collections::HashMap};
     use serde::{Serialize, Deserialize};
-
-    use crate::{aggregate::{StructAggregateImpl, CanRequest, StructBackedAggregate}, EventStoreError};
+    use crate::{aggregate::{ComposedImpl, CanRequest, ComposedAggregate}, EventStoreError, EventStoreStorageEngine};
 
 
     #[derive(Default, Clone, Serialize, Deserialize)]
@@ -188,7 +186,7 @@ mod tests {
         AccountDebite(AccountUpdate),
     }
 
-    impl StructAggregateImpl for Account {
+    impl ComposedImpl for Account {
         fn get_type(&self) -> &str {
             "account"
         }
@@ -242,22 +240,94 @@ mod tests {
         let event_store = Arc::new(event_store);
         let context = event_store.get_context();
         {
-            let mut account = StructBackedAggregate::<Account>::new(context.clone(), None).await.unwrap();
+            let mut account = ComposedAggregate::<Account>::new(context.clone(), None).await.unwrap();
 
             account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
-
             account.request(AccountCommands::CreditAccount(AccountUpdate { amount: 100 })).unwrap();
-
             account.request(AccountCommands::DebitAccount(AccountUpdate { amount: 50 })).unwrap();
-
             account.request(AccountCommands::DebitAccount(AccountUpdate { amount: 10 })).unwrap();
 
-            let state = account.get_state();
+            let state = account.state();
             assert!(state.balance == 40);
         }
         context.commit().await.unwrap();
     }
 
+    #[tokio::test]
+    async fn ensure_events_mutate_state() {
+        let memory = crate::memory::MemoryStorageEngine::new();
+        let event_store = crate::EventStore::new(Arc::new(memory));
+        let event_store = Arc::new(event_store);
+        let context = event_store.clone().get_context();
+        {
+            let mut account = ComposedAggregate::<Account>::new(context.clone(), None).await.unwrap();
+            account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
+            account.request(AccountCommands::CreditAccount(AccountUpdate { amount: 100 })).unwrap();
+            account.request(AccountCommands::DebitAccount(AccountUpdate { amount: 50 })).unwrap();
+            account.request(AccountCommands::DebitAccount(AccountUpdate { amount: 10 })).unwrap();
 
+            let state = account.state();
+            assert!(state.balance == 40);
+        }
+        context.commit().await.unwrap();
 
+        let context = event_store.get_context();
+        {
+            let account = ComposedAggregate::<Account>::load(context, 1).await.unwrap();
+            let state = account.state();
+            assert!(state.balance == 40);
+        }
+    }
+
+    #[tokio::test]
+    async fn ensure_takes_snapshots() {
+        let memory = crate::memory::MemoryStorageEngine::new();
+        let memory = Arc::new(memory);
+        let event_store = crate::EventStore::new(memory.clone());
+        let event_store = Arc::new(event_store);
+        let context = event_store.clone().get_context();
+        {
+            let mut account = ComposedAggregate::<Account>::new(context.clone(), None).await.unwrap();
+            account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
+            for (_i, _) in (0..100).enumerate() {
+                account.request(AccountCommands::CreditAccount(AccountUpdate { amount: 100 })).unwrap();
+            }
+
+            let state = account.state();
+            assert!(state.balance == 100*100);
+        }
+        context.commit().await.unwrap();
+        let context = event_store.get_context();
+        {
+            let account = ComposedAggregate::<Account>::load(context, 1).await.unwrap();
+            let state = account.state();
+            assert!(state.balance == 100*100);
+        }
+        assert_eq!(memory.snapshot_count(), 10);
+    }
+    
+    #[tokio::test]
+    async fn ensure_captures_metadata() {
+        let memory = crate::memory::MemoryStorageEngine::new();
+        let memory = Arc::new(memory);
+        let event_store = crate::EventStore::new(memory.clone());
+        let event_store = Arc::new(event_store);
+        let context = event_store.clone().get_context();
+        context.add_metadata("user", "chavez");
+        context.add_metadata("ip_address", "10.100.1.100");
+        {
+            let mut account = ComposedAggregate::<Account>::new(context.clone(), Some("chavez_account")).await.unwrap();
+            account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
+        }
+        context.commit().await.unwrap();
+
+        let id = memory.get_aggregate_instance_id("account", "chavez_account").await.unwrap().unwrap();
+
+        let events = memory.read_events(id, "account", 0).await.unwrap();
+        let event = events[0].clone();
+        let hashmap: HashMap<String, String> = event.deserialize_metadata().unwrap().unwrap();
+
+        assert_eq!(hashmap.get("user").unwrap(), "chavez");
+        assert_eq!(hashmap.get("ip_address").unwrap(), "10.100.1.100");
+    }
 }

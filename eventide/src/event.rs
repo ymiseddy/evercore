@@ -34,7 +34,7 @@ impl Event {
         })
     }
 
-    pub fn set_metadata<T>(&mut self, metadata: &T) -> Result<(), EventStoreError>
+    pub fn add_metadata<T>(&mut self, metadata: &T) -> Result<(), EventStoreError>
         where T: Serialize + DeserializeOwned
     {
         let state = serde_json::to_string(&metadata).map_err(EventStoreError::EventMetaDataSerializationError)?;
@@ -43,7 +43,7 @@ impl Event {
     }
 
 
-    pub fn get_metadata<T>(&self) -> Result<Option<T>, EventStoreError>
+    pub fn deserialize_metadata<T>(&self) -> Result<Option<T>, EventStoreError>
         where T: Serialize + DeserializeOwned
     {
         match &self.metadata {

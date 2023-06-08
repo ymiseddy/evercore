@@ -39,6 +39,23 @@ impl MemoryStorageEngine {
             memory_store: Arc::new(Mutex::new(MemoryStore::new())), 
         }
     }
+
+    pub fn snapshot_count(&self) -> usize {
+        let memory_store = self.memory_store.lock().unwrap();
+        memory_store.snapshots.len()
+    }
+
+    pub fn snapshot_count_by_aggregate_type(&self, aggregate_type: &str) -> usize {
+        let memory_store = self.memory_store.lock().unwrap();
+        let mut count = 0;
+        for snapshot in &memory_store.snapshots {
+            if snapshot.aggregate_type == aggregate_type {
+                count += 1;
+            }
+        }
+        count
+    }
+
 }
 
 impl Default for MemoryStorageEngine {
@@ -71,7 +88,7 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
         }
     }
 
-    async fn get_events(
+    async fn read_events(
         &self,
         aggregate_id: i64,
         aggregate_type: &str,
@@ -79,6 +96,7 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
     ) -> Result<Vec<Event>, EventStoreError> {
         let memory_store = self.memory_store.lock().unwrap();
         let mut events = Vec::new();
+
         for event in &memory_store.events {
             if event.aggregate_id == aggregate_id && event.aggregate_type == aggregate_type && event.version > version {
                 events.push(event.clone());
@@ -87,7 +105,7 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
         Ok(events)
     }
 
-    async fn get_snapshot(
+    async fn read_snapshot(
         &self,
         aggregate_id: i64,
         aggregate_type: &str,
@@ -177,8 +195,8 @@ mod tests {
         let storage_engine = MemoryStorageEngine::new();
         storage_engine.write_updates(&[event.clone()], &[snapshot.clone()]).await.unwrap();
 
-        let events = storage_engine.get_events(1, "test", 0).await.unwrap();
-        let retrieved_snapshot = storage_engine.get_snapshot(1, "test").await.unwrap().unwrap();
+        let events = storage_engine.read_events(1, "test", 0).await.unwrap();
+        let retrieved_snapshot = storage_engine.read_snapshot(1, "test").await.unwrap().unwrap();
 
         assert_eq!(events[0].data, event.data);
         assert_eq!(events[0].aggregate_id, 1);
@@ -203,7 +221,7 @@ mod tests {
     #[tokio::test]
     async fn ensure_missing_snapshot_returns_none() {
         let storage_engine = MemoryStorageEngine::default();
-        let retrieved_snapshot = storage_engine.get_snapshot(1, "test").await.unwrap();
+        let retrieved_snapshot = storage_engine.read_snapshot(1, "test").await.unwrap();
         assert!(retrieved_snapshot.is_none());
     }
 

@@ -8,7 +8,7 @@ pub struct EventContext {
     event_store: Arc<EventStore>,
     captured_snapshots: RefCell<Vec<Snapshot>>,
     captured_events: RefCell<Vec<Event>>,
-    context: HashMap<String, String>
+    metadata: RefCell<HashMap<String, String>>
 }
 
 impl EventContext {
@@ -17,16 +17,13 @@ impl EventContext {
             event_store,
             captured_snapshots: RefCell::new(Vec::new()),
             captured_events: RefCell::new(Vec::new()),
-            context: HashMap::new()
+            metadata: RefCell::new(HashMap::new())
         }
     }
 
-    pub fn add_metadata<T>(&mut self, key: &str, value: &str) -> Result<(), EventStoreError>
-
-    where
-        T: serde::Serialize + DeserializeOwned    {
-        self.context.insert(key.to_string(), value.to_string());
-        Ok(())
+    pub fn add_metadata(&self, key: &str, value: &str) -> () {
+        self.metadata.borrow_mut().insert(key.to_string(), value.to_string());
+        ();
     }
 
     pub async fn next_aggregate_id(&self, aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError> {
@@ -34,7 +31,7 @@ impl EventContext {
     }
 
     pub async fn load(&self, aggregate: &mut dyn Aggregate<'_>) -> Result<(), EventStoreError> {
-        let snapshot = self.event_store.get_snapshot(aggregate.get_id(), aggregate.get_type()).await?;
+        let snapshot = self.event_store.get_snapshot(aggregate.id(), aggregate.aggregate_type()).await?;
 
         let snapshot_found = snapshot.is_some();
         if let Some(snapshot) = snapshot {
@@ -43,11 +40,11 @@ impl EventContext {
 
         let events = self
             .event_store
-            .get_events(aggregate.get_id(), aggregate.get_type(), aggregate.get_version())
+            .get_events(aggregate.id(), aggregate.aggregate_type(), aggregate.version())
             .await?;
 
         if !snapshot_found && events.is_empty() {
-            return Err(EventStoreError::AggregateNotFound((aggregate.get_type().to_string(), aggregate.get_id())));
+            return Err(EventStoreError::AggregateNotFound((aggregate.aggregate_type().to_string(), aggregate.id())));
         }
 
         for event in events {
@@ -66,23 +63,23 @@ impl EventContext {
     where
         T: serde::Serialize + DeserializeOwned
     {
-        let new_version = source.get_version() + 1;
+        let new_version = source.version() + 1;
 
         let mut event = Event::new(
-            source.get_id(),
-            source.get_type(),
+            source.id(),
+            source.aggregate_type(),
             new_version,
             event_type,
             data,
         )?;
 
-        if !self.context.is_empty() {
-            event.set_metadata(&self.context)?;
+        if !self.metadata.borrow().is_empty() {
+            event.add_metadata(&self.metadata)?;
         }
 
         let snapshot_frequency: i64 = source.snapshot_frequency().into();
         if snapshot_frequency > 0 && new_version % snapshot_frequency == 0 {
-            let snapshot = source.get_snapshot()?;
+            let snapshot = source.take_snapshot()?;
             self.captured_snapshots.borrow_mut().push(snapshot);
         }
 
