@@ -22,7 +22,7 @@ impl EventContext {
         }
     }
 
-    pub fn add_metadata(&mut self, key: &str, value: &str) -> Result<(), EventStoreError> {
+    pub fn add_metadata(&self, key: &str, value: &str) -> Result<(), EventStoreError> {
         self.context.lock()?.insert(key.to_string(), value.to_string());
         Ok(())
     }

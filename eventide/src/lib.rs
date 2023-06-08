@@ -349,8 +349,8 @@ mod tests {
         let event_store = crate::EventStore::new(memory.clone());
         let event_store = Arc::new(event_store);
         let context = event_store.clone().get_context();
-        context.add_metadata("user", "chavez");
-        context.add_metadata("ip_address", "10.100.1.100");
+        context.add_metadata("user", "chavez").unwrap();
+        context.add_metadata("ip_address", "10.100.1.100").unwrap();
         {
             let mut account = ComposedAggregate::<Account>::new(context.clone(), Some("chavez_account")).await.unwrap();
             account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
