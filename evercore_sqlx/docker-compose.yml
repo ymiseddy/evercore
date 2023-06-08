@@ -1,0 +1,26 @@
+version: '3.1'
+
+services:
+
+  pgtest:
+    image: postgres
+    restart: "no"
+    environment:
+      POSTGRES_PASSWORD: dbtest
+      POSTGRES_USER: dbtest
+      POSTGRES_DB: dbtest
+    ports:
+      - 5432:5432
+  
+  mysqltest:
+    image: mysql
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: dbtest
+      MYSQL_PASSWORD: dbtest
+      MYSQL_DATABASE: dbtest
+
+    ports:
+      - 3306:3306
+

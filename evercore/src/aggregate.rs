@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
+use crate::SharedEventContext;
 use crate::event::Event;
 use crate::snapshot::Snapshot;
 use crate::EventStoreError;
@@ -10,19 +11,19 @@ use crate::EventContext;
 pub trait Aggregate<'a> {
 
     /// returns the id of the aggregate.
-    fn get_id(&self) -> u64;
+    fn id(&self) -> i64;
 
     /// sets the id of the aggregate.
-    fn set_id(&mut self, id: u64);
+    fn id_mut(&mut self, id: i64);
 
     /// returns frequency of snapshots for this aggregate. 0 means no snapshots.
-    fn snapshot_frequency(&self) -> u32;
+    fn snapshot_frequency(&self) -> i32;
 
     /// returns the type of the aggregate.
-    fn get_type(&self) -> &str;
+    fn aggregate_type(&self) -> &str;
 
     /// returns the version of the aggregate.
-    fn get_version(&self) -> u64;
+    fn version(&self) -> i64;
 
     /// applies a snapshot to the aggregate.
     fn apply_snapshot(&mut self, snapshot: &Snapshot) -> Result<(), EventStoreError>;
@@ -31,20 +32,20 @@ pub trait Aggregate<'a> {
     fn apply_event(&mut self, event: &Event) -> Result<(), EventStoreError>;
 
     /// returns a snapshot of the aggregate.
-    fn get_snapshot(&self) -> Result<Snapshot, EventStoreError>;
+    fn take_snapshot(&self) -> Result<Snapshot, EventStoreError>;
 }
 
-/// A trait that must be implemented by any struct that is to be used as a StructBackedAggregate.
-pub trait StructAggregateImpl
+/// A trait that must be implemented by any struct that is to be used as a xxxBackedAggregate.
+pub trait Composable
 {
     fn get_type(&self) -> &str;
     fn apply_event(&mut self, event: &Event) -> Result<(), EventStoreError>;
-    fn snapshot_frequency(&self) -> u32 {
+    fn snapshot_frequency(&self) -> i32 {
         10
     }
 }
 
-/// A trait that must be implemented by any struct that is to be used as a StructBackedAggregate. 
+/// A trait that must be implemented by any struct that is to be used as a ComposedAggregate. 
 /// It allows the aggregate do indicate the types of commands and events it accepts.
 pub trait CanRequest<TCommand, TEvent>
 where 
@@ -57,37 +58,37 @@ where
 
 /// Generic implementation of an aggregate that is backed by a struct.
 /// This saves having to implement the boilerplate code for each aggregate.
-pub struct StructBackedAggregate<T>
+pub struct ComposedAggregate<T>
 where 
-    T: DeserializeOwned + Default + Serialize + StructAggregateImpl
+    T: DeserializeOwned + Default + Serialize + Composable
 {
-    id: u64,
-    version: u64,
+    id: i64,
+    version: i64,
     context: Option<Arc<EventContext>>,
     state: T,
 }
 
-impl<'a, T> Aggregate<'a> for StructBackedAggregate<T>
-    where T: DeserializeOwned + Default + Serialize + StructAggregateImpl + Clone
+impl<'a, T> Aggregate<'a> for ComposedAggregate<T>
+    where T: DeserializeOwned + Default + Serialize + Composable + Clone
 {
 
-    fn get_id(&self) -> u64 {
+    fn id(&self) -> i64 {
         self.id
     }
 
-    fn set_id(&mut self, id: u64) {
+    fn id_mut(&mut self, id: i64) {
         self.id = id;
     }
 
-    fn get_type(&self) -> &str {
+    fn aggregate_type(&self) -> &str {
         self.state.get_type()
     }
 
-    fn get_version(&self) -> u64 {
+    fn version(&self) -> i64 {
         self.version
     }
 
-    fn snapshot_frequency(&self) -> u32 {
+    fn snapshot_frequency(&self) -> i32 {
         self.state.snapshot_frequency()
     }
 
@@ -105,35 +106,40 @@ impl<'a, T> Aggregate<'a> for StructBackedAggregate<T>
         Ok(())
     }
 
-    fn get_snapshot(&self) -> Result<Snapshot, EventStoreError> {
+    fn take_snapshot(&self) -> Result<Snapshot, EventStoreError> {
         let snapshot = Snapshot::new(
             self.id, 
-            self.get_type(), 
+            self.aggregate_type(), 
             self.version, 
             &self.state)?;
 
         Ok(snapshot)
     }
+
 }
 
-impl<'a, T> StructBackedAggregate<T> 
+impl<'a, T> ComposedAggregate<T> 
     where 
-        T: 'a +  DeserializeOwned + Default + Serialize + StructAggregateImpl + Clone, 
+        T: 'a +  DeserializeOwned + Default + Serialize + Composable + Clone, 
         Self: Aggregate<'a>
 
 
 {
-    pub async fn new(ctx: Arc<EventContext>) -> Result<StructBackedAggregate<T>, EventStoreError> 
+    pub async fn new(ctx: &SharedEventContext, natural_key: Option<&str>) -> Result<ComposedAggregate<T>, EventStoreError> 
     {
-        Ok(StructBackedAggregate {
-            id: ctx.next_aggregate_id().await?,
+        let state = T::default();
+        let aggregate_type = state.get_type();
+
+
+        Ok(ComposedAggregate {
+            id: ctx.next_aggregate_id(aggregate_type, natural_key).await?,
             version: 0,
-            context: Some(ctx),
-            state: T::default(),
+            context: Some(ctx.clone()),
+            state
         })
     }
 
-    pub fn reqeust<TCommand, TEvent>(&mut self, request: TCommand) -> Result<(), EventStoreError>
+    pub fn request<TCommand, TEvent>(&mut self, request: TCommand) -> Result<(), EventStoreError>
     where 
         TCommand: 'a + Serialize + DeserializeOwned,
         TEvent: 'a + Serialize + DeserializeOwned,
@@ -150,8 +156,8 @@ impl<'a, T> StructBackedAggregate<T>
         Ok(())
     }
 
-    pub async fn load(ctx: Arc<EventContext>, id: u64) -> Result<StructBackedAggregate<T>, EventStoreError>     {
-        let mut state_aggregate = StructBackedAggregate{
+    pub async fn load(ctx: &SharedEventContext, id: i64) -> Result<ComposedAggregate<T>, EventStoreError>     {
+        let mut state_aggregate = ComposedAggregate{
             id,
             version: 0,
             context: Some(ctx.clone()),
@@ -162,11 +168,12 @@ impl<'a, T> StructBackedAggregate<T>
         Ok(state_aggregate)
     }
 
+    pub fn state(&self) -> &T {
+        &self.state
+    }
+
 
     pub fn owned_state(&self) -> T {
         self.state.clone()
     }
-
 }
-
-

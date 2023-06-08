@@ -5,17 +5,19 @@ use crate::EventStoreError;
 /// Event is a representation of a change in the aggregate state.
 #[derive(Clone, Debug)]
 pub struct Event {
-    pub aggregate_id: u64,
+    pub aggregate_id: i64,
     pub aggregate_type: String,
-    pub version: u64,
+    pub version: i64,
     pub event_type: String,
     pub data: String,
+    pub metadata: Option<String>
 }
 
 impl Event {
-    pub fn new<T>(aggregate_id: u64, 
-        aggregate_type: 
-        &str, version: u64, 
+    pub fn new<T>(
+        aggregate_id: i64, 
+        aggregate_type: &str, 
+        version: i64, 
         event_type: &str, 
         data: &T) -> Result<Event, EventStoreError>
         where T: Serialize + DeserializeOwned
@@ -28,8 +30,28 @@ impl Event {
             version,
             event_type: event_type.to_string(),
             data: state,
+            metadata: None
         })
     }
+
+    pub fn add_metadata<T>(&mut self, metadata: &T) -> Result<(), EventStoreError>
+        where T: Serialize + DeserializeOwned
+    {
+        let state = serde_json::to_string(&metadata).map_err(EventStoreError::EventMetaDataSerializationError)?;
+        self.metadata = Some(state);
+        Ok(())
+    }
+
+
+    pub fn deserialize_metadata<T>(&self) -> Result<Option<T>, EventStoreError>
+        where T: Serialize + DeserializeOwned
+    {
+        match &self.metadata {
+            Some(metadata) => serde_json::from_str(&metadata).map_err(EventStoreError::EventDeserializationError),
+            None => Ok(None)
+        }
+    }
+
 
     pub fn deserialize<T>(&self) -> Result<T, EventStoreError>
         where T: Serialize + DeserializeOwned
@@ -44,7 +66,7 @@ mod tests {
 
     #[derive(Serialize, Deserialize, Debug)]
     struct SampleState {
-        value: u64,
+        value: i64,
         name: String,
     }
 
