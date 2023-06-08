@@ -37,8 +37,8 @@ async fn get_initialized_pool() -> sqlx::AnyPool {
         pool
     }
 }
-/*
 
+/*
 #[tokio::test]
 async fn ensure_can_add_new_aggregate_type() {
     let pool = get_initialized_pool().await;
