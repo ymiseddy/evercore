@@ -90,14 +90,14 @@ impl EventStore {
         Ok(())
     }
 
-    pub fn get_context(self: SharedEventStore) -> SharedEventContext {
-        Arc::new(EventContext::new(self))
+    pub fn get_context(self: &SharedEventStore) -> SharedEventContext {
+        Arc::new(EventContext::new(self.clone()))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, collections::HashMap};
+    use std::collections::HashMap;
     use serde::{Serialize, Deserialize};
     use crate::{aggregate::{Composable, CanRequest, ComposedAggregate}, EventStoreError, EventStoreStorageEngine};
 
@@ -130,7 +130,7 @@ mod tests {
     enum AccountEvents {
         AccountCreated(AccountCreation),
         AccountCredited(AccountUpdate),
-        AccountDebite(AccountUpdate),
+        AccountDebited(AccountUpdate),
     }
 
     impl Composable for Account {
@@ -149,7 +149,7 @@ mod tests {
                 AccountEvents::AccountCredited(event) => {
                     self.balance += event.amount;
                 },
-                AccountEvents::AccountDebite(event) => {
+                AccountEvents::AccountDebited(event) => {
                     if event.amount > self.balance {
                         return Err(EventStoreError::RequestProcessingError("Insufficient funds".to_string()));
                     }
@@ -174,7 +174,7 @@ mod tests {
                     Ok(("credited".to_string(), AccountEvents::AccountCredited(command)))
                 },
                 AccountCommands::DebitAccount(command) => {
-                    Ok(("debited".to_string(), AccountEvents::AccountDebite(command)))
+                    Ok(("debited".to_string(), AccountEvents::AccountDebited(command)))
                 },
             }
         }
@@ -183,10 +183,10 @@ mod tests {
     #[tokio::test]
     async fn test_eventstore() {
         let memory = crate::memory::MemoryStorageEngine::new();
-        let event_store = crate::EventStore::new(Arc::new(memory));
+        let event_store = crate::EventStore::new(memory);
         let context = event_store.get_context();
         {
-            let mut account = ComposedAggregate::<Account>::new(context.clone(), None).await.unwrap();
+            let mut account = ComposedAggregate::<Account>::new(&context, None).await.unwrap();
 
             account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
             account.request(AccountCommands::CreditAccount(AccountUpdate { amount: 100 })).unwrap();
@@ -202,10 +202,10 @@ mod tests {
     #[tokio::test]
     async fn ensure_events_mutate_state() {
         let memory = crate::memory::MemoryStorageEngine::new();
-        let event_store = crate::EventStore::new(Arc::new(memory));
+        let event_store = crate::EventStore::new(memory);
         let context = event_store.clone().get_context();
         {
-            let mut account = ComposedAggregate::<Account>::new(context.clone(), None).await.unwrap();
+            let mut account = ComposedAggregate::<Account>::new(&context, None).await.unwrap();
             account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
             account.request(AccountCommands::CreditAccount(AccountUpdate { amount: 100 })).unwrap();
             account.request(AccountCommands::DebitAccount(AccountUpdate { amount: 50 })).unwrap();
@@ -218,7 +218,7 @@ mod tests {
 
         let context = event_store.get_context();
         {
-            let account = ComposedAggregate::<Account>::load(context, 1).await.unwrap();
+            let account = ComposedAggregate::<Account>::load(&context, 1).await.unwrap();
             let state = account.state();
             assert!(state.balance == 40);
         }
@@ -227,11 +227,10 @@ mod tests {
     #[tokio::test]
     async fn ensure_takes_snapshots() {
         let memory = crate::memory::MemoryStorageEngine::new();
-        let memory = Arc::new(memory);
         let event_store = crate::EventStore::new(memory.clone());
-        let context = event_store.clone().get_context();
+        let context = event_store.get_context();
         {
-            let mut account = ComposedAggregate::<Account>::new(context.clone(), None).await.unwrap();
+            let mut account = ComposedAggregate::<Account>::new(&context, None).await.unwrap();
             account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
             for (_i, _) in (0..100).enumerate() {
                 account.request(AccountCommands::CreditAccount(AccountUpdate { amount: 100 })).unwrap();
@@ -243,7 +242,7 @@ mod tests {
         context.commit().await.unwrap();
         let context = event_store.get_context();
         {
-            let account = ComposedAggregate::<Account>::load(context, 1).await.unwrap();
+            let account = ComposedAggregate::<Account>::load(&context, 1).await.unwrap();
             let state = account.state();
             assert!(state.balance == 100*100);
         }
@@ -253,13 +252,12 @@ mod tests {
     #[tokio::test]
     async fn ensure_captures_metadata() {
         let memory = crate::memory::MemoryStorageEngine::new();
-        let memory = Arc::new(memory);
         let event_store = crate::EventStore::new(memory.clone());
-        let context = event_store.clone().get_context();
+        let context = event_store.get_context();
         context.add_metadata("user", "chavez").unwrap();
         context.add_metadata("ip_address", "10.100.1.100").unwrap();
         {
-            let mut account = ComposedAggregate::<Account>::new(context.clone(), Some("chavez_account")).await.unwrap();
+            let mut account = ComposedAggregate::<Account>::new(&context, Some("chavez_account")).await.unwrap();
             account.request(AccountCommands::CreateAccount(AccountCreation { user_id: 1 })).unwrap();
         }
         context.commit().await.unwrap();

@@ -3,7 +3,7 @@ use std::{sync::{Arc, Mutex}, collections::HashMap};
 use crate::{ EventStoreError, event::Event, snapshot::Snapshot, EventStoreStorageEngine};
 
 
-type DynMemoryStore = Arc<Mutex<MemoryStore>>;
+type SharedMemoryStore = Arc<Mutex<MemoryStore>>;
 
 #[derive(Default)]
 pub struct MemoryStore {
@@ -24,20 +24,24 @@ impl MemoryStore {
     }
 }
 
+
+
+type SharedMemoryStorageEngine = Arc<MemoryStorageEngine>;
+
 /// Memory based storage engine for EventStore
 ///
 /// This is a simple in-memory storage engine for EventStore. It is not intended for production use.
 /// It is useful for testing and as a reference implementation.
 ///
 pub struct MemoryStorageEngine {
-    memory_store: DynMemoryStore,
+    memory_store: SharedMemoryStore,
 }
 
 impl MemoryStorageEngine {
-    pub fn new() -> MemoryStorageEngine {
+    pub fn new() -> SharedMemoryStorageEngine {
         MemoryStorageEngine {
             memory_store: Arc::new(Mutex::new(MemoryStore::new())), 
-        }
+        }.into()
     }
 
     pub fn snapshot_count(&self) -> usize {
@@ -58,11 +62,6 @@ impl MemoryStorageEngine {
 
 }
 
-impl Default for MemoryStorageEngine {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 #[async_trait::async_trait]
 impl EventStoreStorageEngine for MemoryStorageEngine {
@@ -220,7 +219,7 @@ mod tests {
 
     #[tokio::test]
     async fn ensure_missing_snapshot_returns_none() {
-        let storage_engine = MemoryStorageEngine::default();
+        let storage_engine = MemoryStorageEngine::new();
         let retrieved_snapshot = storage_engine.read_snapshot(1, "test").await.unwrap();
         assert!(retrieved_snapshot.is_none());
     }

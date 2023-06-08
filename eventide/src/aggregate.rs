@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
+use crate::SharedEventContext;
 use crate::event::Event;
 use crate::snapshot::Snapshot;
 use crate::EventStoreError;
@@ -124,7 +125,7 @@ impl<'a, T> ComposedAggregate<T>
 
 
 {
-    pub async fn new(ctx: Arc<EventContext>, natural_key: Option<&str>) -> Result<ComposedAggregate<T>, EventStoreError> 
+    pub async fn new(ctx: &SharedEventContext, natural_key: Option<&str>) -> Result<ComposedAggregate<T>, EventStoreError> 
     {
         let state = T::default();
         let aggregate_type = state.get_type();
@@ -133,7 +134,7 @@ impl<'a, T> ComposedAggregate<T>
         Ok(ComposedAggregate {
             id: ctx.next_aggregate_id(aggregate_type, natural_key).await?,
             version: 0,
-            context: Some(ctx),
+            context: Some(ctx.clone()),
             state
         })
     }
@@ -155,7 +156,7 @@ impl<'a, T> ComposedAggregate<T>
         Ok(())
     }
 
-    pub async fn load(ctx: Arc<EventContext>, id: i64) -> Result<ComposedAggregate<T>, EventStoreError>     {
+    pub async fn load(ctx: &SharedEventContext, id: i64) -> Result<ComposedAggregate<T>, EventStoreError>     {
         let mut state_aggregate = ComposedAggregate{
             id,
             version: 0,
