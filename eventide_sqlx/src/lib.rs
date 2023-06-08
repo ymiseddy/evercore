@@ -28,6 +28,8 @@ pub struct SqlxStorageEngine {
     dbtype: DbType,
 }
 
+
+
 impl SqlxStorageEngine {
     /// Creates a new SqlxStorageEngine.
     pub fn new(dbtype: DbType, pool: AnyPool) -> SqlxStorageEngine {
@@ -69,9 +71,10 @@ impl SqlxStorageEngine {
         for query in queries {
             sqlx::query(&query)
                 .execute(&mut connection)
-                .await
+                .await  
                 .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
         }
+
         Ok(())
     }
 

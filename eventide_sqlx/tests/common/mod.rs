@@ -101,6 +101,11 @@ pub async fn can_write_updates(dbtype: DbType, pool: sqlx::AnyPool) {
 
     let new_events = storage.read_events(aggregate_instance, "user", 0).await.unwrap();
 
+
+
+    let new_snapshot = storage.read_snapshot(aggregate_instance, "user").await.unwrap()
+        .unwrap();
+    
     assert_eq!(new_events.len(), 1);
     assert_eq!(new_events[0].aggregate_id, events[0].aggregate_id);
     assert_eq!(new_events[0].aggregate_type, events[0].aggregate_type);
@@ -108,10 +113,6 @@ pub async fn can_write_updates(dbtype: DbType, pool: sqlx::AnyPool) {
     assert_eq!(new_events[0].version, events[0].version);
     assert_eq!(new_events[0].data, events[0].data);
     assert_eq!(new_events[0].metadata, events[0].metadata);
-
-
-    let new_snapshot = storage.read_snapshot(aggregate_instance, "user").await.unwrap()
-        .unwrap();
 
     assert_eq!(new_snapshot.aggregate_id, snapshots[0].aggregate_id);
     assert_eq!(new_snapshot.aggregate_type, snapshots[0].aggregate_type);

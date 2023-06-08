@@ -38,7 +38,6 @@ async fn get_initialized_pool() -> sqlx::AnyPool {
     }
 }
 
-/*
 #[tokio::test]
 async fn ensure_can_add_new_aggregate_type() {
     let pool = get_initialized_pool().await;
@@ -75,4 +74,3 @@ async fn ensure_can_write_updates() {
     let pool = get_initialized_pool().await;
     common::can_write_updates(DATABASE_TYPE, pool).await;
 }
-*/
