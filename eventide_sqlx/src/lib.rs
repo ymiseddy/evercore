@@ -1,18 +1,17 @@
-#[forbid(unsafe_code)]
-
-mod pg;
-mod sqlite;
 mod mysql;
+#[forbid(unsafe_code)]
+mod pg;
 mod queries;
+mod sqlite;
 
 use crate::queries::QueryBuilder;
-use std::{collections::HashMap, sync::Arc};
-use futures::lock::Mutex;
 use eventide::{event::Event, snapshot::Snapshot, EventStoreError, EventStoreStorageEngine};
-use sqlx::{AnyPool, pool::PoolConnection, Row, Connection};
+use futures::lock::Mutex;
+use mysql::MysqlBuilder;
 use pg::PostgresqlBuilder;
 use sqlite::SqliteBuilder;
-use mysql::MysqlBuilder;
+use sqlx::{pool::PoolConnection, AnyPool, Connection, Row};
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(Clone)]
 pub enum DbType {
@@ -37,7 +36,7 @@ impl SqlxStorageEngine {
 
         let aggregate_types: HashMap<String, i64> = HashMap::new();
         let aggregate_types = Arc::new(Mutex::new(aggregate_types));
-        
+
         let query_builder: Arc<dyn QueryBuilder + Send + Sync> = match dbtype {
             DbType::Postgres => Arc::new(PostgresqlBuilder),
             DbType::Sqlite => Arc::new(SqliteBuilder),
@@ -54,100 +53,101 @@ impl SqlxStorageEngine {
     }
 
     async fn get_connection(&self) -> Result<PoolConnection<sqlx::Any>, EventStoreError> {
-        let connection = self.pool
-            .acquire().await.map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
-            Ok(connection)
+        let connection = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
+        Ok(connection)
     }
 
-
     /// Can be called to build the database schema.
-    pub async fn build(&self) -> Result<(), EventStoreError> {
-        let mut connection = self.get_connection().await?; 
+    pub async fn build_tables(&self) -> Result<(), EventStoreError> {
+        let mut connection = self.get_connection().await?;
 
         let queries = self.query_builder.build_queries();
         for query in queries {
-            sqlx::query(&query).execute(&mut connection).await.map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+            sqlx::query(&query)
+                .execute(&mut connection)
+                .await
+                .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
         }
         Ok(())
     }
 
-    pub async fn drop(&self) -> Result<(), EventStoreError> {
-        let mut connection = self.get_connection().await?; 
+    pub async fn drop_tables(&self) -> Result<(), EventStoreError> {
+        let mut connection = self.get_connection().await?;
         let queries = self.query_builder.drop_queries();
         for query in queries {
-            sqlx::query(&query).execute(&mut connection).await.map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+            sqlx::query(&query)
+                .execute(&mut connection)
+                .await
+                .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
         }
         Ok(())
     }
 
-    pub async fn get_aggregate_type_id(&self, aggregate_type: &str) -> Result<i64, EventStoreError> {
+    pub async fn get_aggregate_type_id(
+        &self,
+        aggregate_type: &str,
+    ) -> Result<i64, EventStoreError> {
         let mut aggregate_types = self.aggregate_types.lock().await;
         if let Some(id) = aggregate_types.get(aggregate_type) {
             return Ok(*id);
         }
 
         let mut connection = self.get_connection().await?;
-        let mut tx = connection.begin()
-            .await.map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+        let mut tx = connection
+            .begin()
+            .await
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
         let query = self.query_builder.get_aggregate_type();
         let row = sqlx::query(&query)
             .bind(aggregate_type)
             .fetch_optional(&mut tx)
             .await
-            .map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
-            let id = match row {
-                Some(row) => {
-                    let id: i64 = row.get(0);
-                    id
-                },
-                None => {
-                    let query = self.query_builder.insert_aggregate_type();
-                    let query = sqlx::query(&query)
-                        .bind(aggregate_type);
+        let id = match row {
+            Some(row) => {
+                let id: i64 = row.get(0);
+                id
+            }
+            None => {
+                let query = self.query_builder.insert_aggregate_type();
+                let query = sqlx::query(&query).bind(aggregate_type);
 
-                    
-                    match &self.dbtype {
-                        DbType::Postgres => {
-                            let result = query
-                                .fetch_one(&mut tx)
-                                .await
-                                .map_err(|e| {
-                                    EventStoreError::StorageEngineError(Box::new(e))
-                                })?;
-                            result.get(0)
-                        },
-                        _ => {
-                            let result = query.execute(&mut tx)
-                                .await
-                                .map_err(|e| {
-                                    EventStoreError::StorageEngineError(Box::new(e))
-                                })?;
+                match &self.dbtype {
+                    DbType::Postgres => {
+                        let result = query
+                            .fetch_one(&mut tx)
+                            .await
+                            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
+                        result.get(0)
+                    }
+                    _ => {
+                        let result = query
+                            .execute(&mut tx)
+                            .await
+                            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
-                            result.last_insert_id()
-                                .ok_or_else(|| EventStoreError::StorageEngineErrorOther("Couldn't retrieve last insert id.".to_string()))?
-                        }
+                        result.last_insert_id().ok_or_else(|| {
+                            EventStoreError::StorageEngineErrorOther(
+                                "Couldn't retrieve last insert id.".to_string(),
+                            )
+                        })?
                     }
                 }
-            };
-            tx.commit().await.map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
-            aggregate_types.insert(aggregate_type.to_string(), id);
+            }
+        };
+        tx.commit()
+            .await
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
+        aggregate_types.insert(aggregate_type.to_string(), id);
         Ok(id)
     }
-    
+
     pub async fn get_event_type_id(&self, event_type: &str) -> Result<i64, EventStoreError> {
         let mut event_types = self.event_types.lock().await;
         if let Some(id) = event_types.get(event_type) {
@@ -155,10 +155,10 @@ impl SqlxStorageEngine {
         }
 
         let mut connection = self.get_connection().await?;
-        let mut tx = connection.begin()
-            .await.map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+        let mut tx = connection
+            .begin()
+            .await
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
         let query = self.query_builder.get_event_type();
 
@@ -166,61 +166,55 @@ impl SqlxStorageEngine {
             .bind(event_type)
             .fetch_optional(&mut tx)
             .await
-            .map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
-            let id = match row {
-                Some(row) => {
-                    let id: i64 = row.get(0);
-                    id
-                },
-                None => {
-                    let query = self.query_builder.insert_event_type();
-                    let query = sqlx::query(&query)
-                        .bind(event_type);
+        let id = match row {
+            Some(row) => {
+                let id: i64 = row.get(0);
+                id
+            }
+            None => {
+                let query = self.query_builder.insert_event_type();
+                let query = sqlx::query(&query).bind(event_type);
 
-                    
-                    match &self.dbtype {
-                        DbType::Postgres => {
-                            let result = query
-                                .fetch_one(&mut tx)
-                                .await
-                                .map_err(|e| {
-                                    EventStoreError::StorageEngineError(Box::new(e))
-                                })?;
-                            result.get(0)
-                        },
-                        _ => {
-                            let result = query.execute(&mut tx)
-                                .await
-                                .map_err(|e| {
-                                    EventStoreError::StorageEngineError(Box::new(e))
-                                })?;
+                match &self.dbtype {
+                    DbType::Postgres => {
+                        let result = query
+                            .fetch_one(&mut tx)
+                            .await
+                            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
+                        result.get(0)
+                    }
+                    _ => {
+                        let result = query
+                            .execute(&mut tx)
+                            .await
+                            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
-                            result.last_insert_id()
-                                .ok_or_else(|| EventStoreError::StorageEngineErrorOther("Couldn't retrieve last insert id.".to_string()))?
-                        }
+                        result.last_insert_id().ok_or_else(|| {
+                            EventStoreError::StorageEngineErrorOther(
+                                "Couldn't retrieve last insert id.".to_string(),
+                            )
+                        })?
                     }
                 }
-            };
-            tx.commit().await.map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
-            event_types.insert(event_type.to_string(), id);
-            Ok(id)
+            }
+        };
+        tx.commit()
+            .await
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
+        event_types.insert(event_type.to_string(), id);
+        Ok(id)
     }
 }
-
 
 #[async_trait::async_trait]
 impl EventStoreStorageEngine for SqlxStorageEngine {
     async fn create_aggregate_instance(
-        &self, 
-        aggregate_type: &str, 
-        natural_key: Option<&str>
+        &self,
+        aggregate_type: &str,
+        natural_key: Option<&str>,
     ) -> Result<i64, EventStoreError> {
-
         let aggregate_type_id = self.get_aggregate_type_id(aggregate_type).await?;
 
         let query = self.query_builder.insert_aggregate_instance();
@@ -230,34 +224,34 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             .bind(aggregate_type_id)
             .bind(natural_key);
 
-            let id = match &self.dbtype {
-                DbType::Postgres => {
-                    let result = query
-                        .fetch_one(&mut connection)
-                        .await
-                        .map_err(|e| {
-                            EventStoreError::StorageEngineError(Box::new(e))
-                        })?;
-                    result.get(0)
-                },
-                _ => {
-                    let result = query.execute(&mut connection)
-                        .await
-                        .map_err(|e| {
-                            EventStoreError::StorageEngineError(Box::new(e))
-                        })?;
+        let id = match &self.dbtype {
+            DbType::Postgres => {
+                let result = query
+                    .fetch_one(&mut connection)
+                    .await
+                    .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
+                result.get(0)
+            }
+            _ => {
+                let result = query
+                    .execute(&mut connection)
+                    .await
+                    .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
-                      result.last_insert_id()
-                        .ok_or_else(|| EventStoreError::StorageEngineErrorOther("Couldn't retrieve last insert id.".to_string()))?
-                }
-            };
+                result.last_insert_id().ok_or_else(|| {
+                    EventStoreError::StorageEngineErrorOther(
+                        "Couldn't retrieve last insert id.".to_string(),
+                    )
+                })?
+            }
+        };
         Ok(id)
     }
 
     async fn get_aggregate_instance_id(
-        &self, 
-        aggregate_type: &str, 
-        natural_key: &str
+        &self,
+        aggregate_type: &str,
+        natural_key: &str,
     ) -> Result<Option<i64>, EventStoreError> {
         let aggregate_type_id = self.get_aggregate_type_id(aggregate_type).await?;
         let query = self.query_builder.get_aggregate_instance_id();
@@ -268,9 +262,7 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             .bind(natural_key)
             .fetch_optional(&mut connection)
             .await
-            .map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
         if let Some(row) = row {
             let id: i64 = row.get(0);
@@ -296,9 +288,7 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             .bind(version)
             .fetch_all(&mut connection)
             .await
-            .map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
         let events = rows.into_iter().map(|row| {
             let aggregate_id: i64 = row.get("aggregate_id");
@@ -307,7 +297,7 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             let event_type: String = row.get("event_type");
             let data: String = row.get("data");
             let metadata: Option<String> = row.get("metadata");
-            
+
             Event {
                 aggregate_id,
                 aggregate_type,
@@ -334,12 +324,9 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
             .bind(aggregate_type_id)
             .fetch_optional(&mut connection)
             .await
-            .map_err(|e| {
-                EventStoreError::StorageEngineError(Box::new(e))
-            })?;
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
         let snapshot = match row {
             Some(row) => {
-
                 let aggregate_id: i64 = row.get("aggregate_id");
                 let aggregate_type: String = row.get("aggregate_type");
                 let version: i64 = row.get("version");
@@ -352,28 +339,40 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
                     data,
                 };
                 Some(snapshot)
-            },
-            None => None
+            }
+            None => None,
         };
         Ok(snapshot)
-
     }
 
     async fn write_updates(
         &self,
-        _events: &[Event],
-        _snapshots: &[Snapshot],
+        events: &[Event],
+        snapshots: &[Snapshot],
     ) -> Result<(), EventStoreError> {
-        let mut connection = self.get_connection().await?;
-        let mut tx = connection.begin().await.map_err(|e| {
-            EventStoreError::StorageEngineError(Box::new(e))
-        })?;
 
-        for event in _events {
+
+        // Since there is the possiblility of looking up the event and aggregate types
+        // from the database, we want to do that before we start the transaction.
+        let mut event_write_info: Vec<(i64, i64, &Event)> = Vec::new();
+        for event in events {
             let event_type_id = self.get_event_type_id(&event.event_type).await?;
             let aggregate_type_id = self.get_aggregate_type_id(&event.aggregate_type).await?;
+            event_write_info.push((event_type_id, aggregate_type_id, &event));
 
-            let aggregate_id: i64 = event.aggregate_id;            let version: i64 = event.version;
+        }
+
+
+        // Write all events inside a transaction so it's all or nothing.
+        let mut connection = self.get_connection().await?;
+        let mut tx = connection
+            .begin()
+            .await
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
+
+        for (event_type_id, aggregate_type_id, event) in event_write_info {
+            let aggregate_id: i64 = event.aggregate_id;
+            let version: i64 = event.version;
 
             sqlx::query(&self.query_builder.insert_event())
                 .bind(aggregate_id)
@@ -384,13 +383,11 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
                 .bind(&event.metadata)
                 .execute(&mut tx)
                 .await
-                .map_err(|e| {
-                    EventStoreError::StorageEngineError(Box::new(e))
-                })?;
+                .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
         }
 
         // Write snapshots
-        for snapshot in _snapshots {
+        for snapshot in snapshots {
             let aggregate_type_id = self.get_aggregate_type_id(&snapshot.aggregate_type).await?;
 
             let aggregate_id: i64 = snapshot.aggregate_id;
@@ -401,14 +398,12 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
                 .bind(&snapshot.data)
                 .execute(&mut tx)
                 .await
-                .map_err(|e| {
-                    EventStoreError::StorageEngineError(Box::new(e))
-                })?;
+                .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
         }
 
-        tx.commit().await.map_err(|e| {
-            EventStoreError::StorageEngineError(Box::new(e))
-        })?;
+        tx.commit()
+            .await
+            .map_err(|e| EventStoreError::StorageEngineError(Box::new(e)))?;
 
         Ok(())
     }

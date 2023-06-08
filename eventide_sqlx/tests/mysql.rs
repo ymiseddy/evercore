@@ -26,8 +26,8 @@ async fn get_initialized_pool() -> sqlx::AnyPool {
                 let pool = AnyPool::connect(DATABASE_URL).await.unwrap();
                 
                 let storage = SqlxStorageEngine::new(DATABASE_TYPE, pool.clone());
-                storage.drop().await.unwrap();
-                storage.build().await.unwrap();
+                storage.drop_tables().await.unwrap();
+                storage.build_tables().await.unwrap();
 
 
                 let result_pool = pool.clone();

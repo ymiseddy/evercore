@@ -9,7 +9,7 @@ pub mod memory;
 
 use crate::contexts::EventContext;
 
-use std::sync::Arc;
+use std::{sync::{Arc, PoisonError}, future::Future};
 
 use event::Event;
 use snapshot::Snapshot;
@@ -40,14 +40,14 @@ pub trait EventStoreStorageEngine {
 /// EventStore is the main struct for the event store.
 #[derive(Clone)]
 pub struct EventStore {
-    storage_engine: Arc<dyn EventStoreStorageEngine>,
+    storage_engine: Arc<dyn EventStoreStorageEngine + Send + Sync>,
 }
 
 
 impl EventStore {
 
     /// Create a new EventStore with the given storage engine.
-    pub fn new(storage_engine: Arc<dyn EventStoreStorageEngine>) -> EventStore {
+    pub fn new(storage_engine: Arc<dyn EventStoreStorageEngine + Send + Sync>) -> EventStore {
         EventStore { storage_engine }
     }
 
@@ -74,6 +74,25 @@ impl EventStore {
 
     pub async fn write_updates(&self, events: &[Event], snapshots: &[Snapshot]) -> Result<(), EventStoreError> {
         self.storage_engine.write_updates(events, snapshots).await?;
+        Ok(())
+    }
+/*
+async fn example<Fut>(f: impl FnOnce(i32, i32) -> Fut)
+where
+    Fut: Future<Output = bool>,
+{
+    f(1, 2).await;
+}
+    */
+    pub async fn with_context<Fut>(self: Arc<EventStore>, context_task: impl FnOnce(Arc<EventContext>) -> Fut ) 
+       -> Result<(), EventStoreError> 
+    where 
+        Fut: Future<Output = Result<(), EventStoreError>> + Send + 'static
+        
+    {
+        let context = self.get_context();
+        context_task(context.clone()).await?;
+        context.commit().await?;
         Ok(())
     }
 
@@ -131,6 +150,16 @@ pub enum EventStoreError {
     #[error("Error during context callback.")]
     ContextError(Box<dyn std::error::Error>),
 
+    /*
+    #[error("Error acquiring lock in context.")]
+    ContextErrorLock(#[from] PoisonError),
+    */
+    #[error("Error acquiring lock in context.")]
+    ContextPoisonError,
+    
+    #[error("Error in storage engine.")]
+    ContextErrorOther(String),
+
     #[error("Attempt to publish an event before context is set.")]
     NoContext,
 
@@ -146,6 +175,13 @@ pub enum EventStoreError {
     #[error("Aggregate instance not found.")]
     AggregateInstanceNotFound,
 
+}
+
+
+impl<T> From<PoisonError<T>> for EventStoreError {
+    fn from(_err: PoisonError<T>) -> Self {
+        Self::ContextPoisonError
+    }
 }
 
 #[cfg(test)]
