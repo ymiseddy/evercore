@@ -3,39 +3,23 @@ pub mod event;
 pub mod snapshot;
 pub mod aggregate;
 pub mod contexts;
+mod error;
+mod storage_engine;
+
+
+pub use error::EventStoreError;
+pub use storage_engine::EventStoreStorageEngine;
 
 #[cfg(feature = "memory")]
 pub mod memory;
 
 use crate::contexts::EventContext;
 
-use std::{sync::{Arc, PoisonError}, future::Future};
+use std::{sync::Arc, future::Future};
 
 use event::Event;
 use snapshot::Snapshot;
-use thiserror::Error;
 
-
-/// EventStorageEnging is a trait that must be implemented by any storage engine that is to be used by the event store.
-#[async_trait::async_trait]
-pub trait EventStoreStorageEngine {
-    async fn create_aggregate_instance(&self, aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError>;
-    async fn get_aggregate_instance_id(&self, aggregate_type: &str, natural_key: &str) -> Result<Option<i64>, EventStoreError>;
-
-    async fn read_events(
-        &self,
-        aggregate_id: i64,
-        aggregate_type: &str,
-        version: i64,
-    ) -> Result<Vec<Event>, EventStoreError>;
-
-    async fn read_snapshot(
-        &self,
-        aggregate_id: i64,
-        aggregate_type: &str,
-    ) -> Result<Option<Snapshot>, EventStoreError>;
-    async fn write_updates(&self, events: &[Event], snapshot: &[Snapshot]) -> Result<(), EventStoreError>;
-}
 
 /// EventStore is the main struct for the event store.
 #[derive(Clone)]
@@ -43,12 +27,14 @@ pub struct EventStore {
     storage_engine: Arc<dyn EventStoreStorageEngine + Send + Sync>,
 }
 
+pub type SharedEventStore = Arc<EventStore>;
+pub type SharedEventContext = Arc<EventContext>;
 
 impl EventStore {
 
     /// Create a new EventStore with the given storage engine.
-    pub fn new(storage_engine: Arc<dyn EventStoreStorageEngine + Send + Sync>) -> EventStore {
-        EventStore { storage_engine }
+    pub fn new(storage_engine: Arc<dyn EventStoreStorageEngine + Send + Sync>) -> SharedEventStore {
+        Into::into(EventStore { storage_engine })
     }
 
     pub async fn next_aggregate_id(&self, aggregate_type: &str, natural_key: Option<&str>) -> Result<i64, EventStoreError> {
@@ -76,15 +62,23 @@ impl EventStore {
         self.storage_engine.write_updates(events, snapshots).await?;
         Ok(())
     }
-/*
-async fn example<Fut>(f: impl FnOnce(i32, i32) -> Fut)
-where
-    Fut: Future<Output = bool>,
-{
-    f(1, 2).await;
-}
-    */
-    pub async fn with_context<Fut>(self: Arc<EventStore>, context_task: impl FnOnce(Arc<EventContext>) -> Fut ) 
+    
+
+    /// Execute a task within a contest, returning a result.
+    pub async fn with_context_returning<Fut, T>(self: SharedEventStore, context_task: impl FnOnce(SharedEventContext) -> Fut ) 
+       -> Result<T, EventStoreError> 
+    where 
+        Fut: Future<Output = Result<T, EventStoreError>> + Send + 'static
+        
+    {
+        let context = self.get_context();
+        let result = context_task(context.clone()).await?;
+        context.commit().await?;
+        Ok(result)
+    }
+
+    /// Execute a task within a contest.
+    pub async fn with_context<Fut>(self: SharedEventStore, context_task: impl FnOnce(SharedEventContext) -> Fut ) 
        -> Result<(), EventStoreError> 
     where 
         Fut: Future<Output = Result<(), EventStoreError>> + Send + 'static
@@ -96,91 +90,8 @@ where
         Ok(())
     }
 
-    pub fn get_context(self: Arc<EventStore>) -> Arc<EventContext> {
+    pub fn get_context(self: SharedEventStore) -> SharedEventContext {
         Arc::new(EventContext::new(self))
-    }
-}
-
-/// EventStoreError is the error type for the event store.
-#[derive(Error, Debug)]
-pub enum EventStoreError {
-
-    #[error("Aggregate not found: {0:?}")]
-    AggregateNotFound((String, i64)),
-
-    #[error("Error serializaing event.")]
-    EventSerializationError(serde_json::Error),
-    
-    #[error("Error serializaing metadata for event.")]
-    EventMetaDataSerializationError(serde_json::Error),
-
-    #[error("Error deserializaing event.")]
-    EventDeserializationError(serde_json::Error),
-
-    #[error("Error serializaing snapshot.")]
-    SnapshotSerializationError(serde_json::Error),
-
-    #[error("Error deserializaing snapshot.")]
-    SnapshotDeserializationError(serde_json::Error),
-
-    #[error("Error saving events.")]
-    SaveEventsError(Box<dyn std::error::Error>),
-
-    #[error("Error saving snapshot.")]
-    SaveSnapshotError(Box<dyn std::error::Error>),
-
-    #[error("Error getting events.")]
-    GetEventsError(Box<dyn std::error::Error>),
-
-    #[error("Error getting snapshot.")]
-    GetSnapshotError(Box<dyn std::error::Error>),
-
-    #[error("Error getting next aggregate id.")]
-    GetNextAggregateIdError(Box<dyn std::error::Error>),
-
-    #[error("Error applying snapshot.")]
-    ApplySnapshotError(String),
-
-    #[error("Error processing request.")]
-    RequestProcessingError(String),
-
-    #[error("Error applying event.")]
-    ApplyEventError(String),
-
-    #[error("Error during context callback.")]
-    ContextError(Box<dyn std::error::Error>),
-
-    /*
-    #[error("Error acquiring lock in context.")]
-    ContextErrorLock(#[from] PoisonError),
-    */
-    #[error("Error acquiring lock in context.")]
-    ContextPoisonError,
-    
-    #[error("Error in storage engine.")]
-    ContextErrorOther(String),
-
-    #[error("Attempt to publish an event before context is set.")]
-    NoContext,
-
-    #[error("Error in storage engine.")]
-    StorageEngineError(Box<dyn std::error::Error>),
-   
-    #[error("Error in storage engine.")]
-    StorageEngineErrorOther(String),
-    
-    #[error("Error in storage engine.")]
-    StorageEngineConnectionError(String),
-
-    #[error("Aggregate instance not found.")]
-    AggregateInstanceNotFound,
-
-}
-
-
-impl<T> From<PoisonError<T>> for EventStoreError {
-    fn from(_err: PoisonError<T>) -> Self {
-        Self::ContextPoisonError
     }
 }
 
@@ -188,7 +99,7 @@ impl<T> From<PoisonError<T>> for EventStoreError {
 mod tests {
     use std::{sync::Arc, collections::HashMap};
     use serde::{Serialize, Deserialize};
-    use crate::{aggregate::{ComposedImpl, CanRequest, ComposedAggregate}, EventStoreError, EventStoreStorageEngine};
+    use crate::{aggregate::{Composable, CanRequest, ComposedAggregate}, EventStoreError, EventStoreStorageEngine};
 
 
     #[derive(Default, Clone, Serialize, Deserialize)]
@@ -222,7 +133,7 @@ mod tests {
         AccountDebite(AccountUpdate),
     }
 
-    impl ComposedImpl for Account {
+    impl Composable for Account {
         fn get_type(&self) -> &str {
             "account"
         }
@@ -273,7 +184,6 @@ mod tests {
     async fn test_eventstore() {
         let memory = crate::memory::MemoryStorageEngine::new();
         let event_store = crate::EventStore::new(Arc::new(memory));
-        let event_store = Arc::new(event_store);
         let context = event_store.get_context();
         {
             let mut account = ComposedAggregate::<Account>::new(context.clone(), None).await.unwrap();
@@ -293,7 +203,6 @@ mod tests {
     async fn ensure_events_mutate_state() {
         let memory = crate::memory::MemoryStorageEngine::new();
         let event_store = crate::EventStore::new(Arc::new(memory));
-        let event_store = Arc::new(event_store);
         let context = event_store.clone().get_context();
         {
             let mut account = ComposedAggregate::<Account>::new(context.clone(), None).await.unwrap();
@@ -320,7 +229,6 @@ mod tests {
         let memory = crate::memory::MemoryStorageEngine::new();
         let memory = Arc::new(memory);
         let event_store = crate::EventStore::new(memory.clone());
-        let event_store = Arc::new(event_store);
         let context = event_store.clone().get_context();
         {
             let mut account = ComposedAggregate::<Account>::new(context.clone(), None).await.unwrap();
@@ -347,7 +255,6 @@ mod tests {
         let memory = crate::memory::MemoryStorageEngine::new();
         let memory = Arc::new(memory);
         let event_store = crate::EventStore::new(memory.clone());
-        let event_store = Arc::new(event_store);
         let context = event_store.clone().get_context();
         context.add_metadata("user", "chavez").unwrap();
         context.add_metadata("ip_address", "10.100.1.100").unwrap();

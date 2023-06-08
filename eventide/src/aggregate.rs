@@ -34,8 +34,8 @@ pub trait Aggregate<'a> {
     fn take_snapshot(&self) -> Result<Snapshot, EventStoreError>;
 }
 
-/// A trait that must be implemented by any struct that is to be used as a StructBackedAggregate.
-pub trait ComposedImpl
+/// A trait that must be implemented by any struct that is to be used as a xxxBackedAggregate.
+pub trait Composable
 {
     fn get_type(&self) -> &str;
     fn apply_event(&mut self, event: &Event) -> Result<(), EventStoreError>;
@@ -44,7 +44,7 @@ pub trait ComposedImpl
     }
 }
 
-/// A trait that must be implemented by any struct that is to be used as a StructBackedAggregate. 
+/// A trait that must be implemented by any struct that is to be used as a ComposedAggregate. 
 /// It allows the aggregate do indicate the types of commands and events it accepts.
 pub trait CanRequest<TCommand, TEvent>
 where 
@@ -59,7 +59,7 @@ where
 /// This saves having to implement the boilerplate code for each aggregate.
 pub struct ComposedAggregate<T>
 where 
-    T: DeserializeOwned + Default + Serialize + ComposedImpl
+    T: DeserializeOwned + Default + Serialize + Composable
 {
     id: i64,
     version: i64,
@@ -68,7 +68,7 @@ where
 }
 
 impl<'a, T> Aggregate<'a> for ComposedAggregate<T>
-    where T: DeserializeOwned + Default + Serialize + ComposedImpl + Clone
+    where T: DeserializeOwned + Default + Serialize + Composable + Clone
 {
 
     fn id(&self) -> i64 {
@@ -119,7 +119,7 @@ impl<'a, T> Aggregate<'a> for ComposedAggregate<T>
 
 impl<'a, T> ComposedAggregate<T> 
     where 
-        T: 'a +  DeserializeOwned + Default + Serialize + ComposedImpl + Clone, 
+        T: 'a +  DeserializeOwned + Default + Serialize + Composable + Clone, 
         Self: Aggregate<'a>
 
 

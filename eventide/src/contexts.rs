@@ -1,4 +1,4 @@
-use std::{sync::{Arc}, collections::HashMap};
+use std::{sync::Arc, collections::HashMap};
 use serde::de::DeserializeOwned;
 use std::sync::Mutex;
 use crate::{EventStore, event::Event, EventStoreError, aggregate::Aggregate, snapshot::Snapshot};
@@ -74,9 +74,9 @@ impl EventContext {
             data,
         )?;
 
-        if !self.context.lock()?
-            .is_empty() {
-            event.add_metadata(&self.context)?;
+        let context = self.context.lock()?;
+        if !context.is_empty() {
+            event.add_metadata(&*context)?;
         }
 
         let snapshot_frequency: i64 = source.snapshot_frequency().into();
