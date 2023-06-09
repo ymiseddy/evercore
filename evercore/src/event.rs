@@ -47,7 +47,7 @@ impl Event {
         where T: Serialize + DeserializeOwned
     {
         match &self.metadata {
-            Some(metadata) => serde_json::from_str(&metadata).map_err(EventStoreError::EventDeserializationError),
+            Some(metadata) => serde_json::from_str(metadata).map_err(EventStoreError::EventDeserializationError),
             None => Ok(None)
         }
     }

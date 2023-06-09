@@ -361,7 +361,7 @@ impl EventStoreStorageEngine for SqlxStorageEngine {
         for event in events {
             let event_type_id = self.get_event_type_id(&event.event_type).await?;
             let aggregate_type_id = self.get_aggregate_type_id(&event.aggregate_type).await?;
-            event_write_info.push((event_type_id, aggregate_type_id, &event));
+            event_write_info.push((event_type_id, aggregate_type_id, event));
 
         }
 

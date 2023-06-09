@@ -71,8 +71,8 @@ impl EventStoreStorageEngine for MemoryStorageEngine {
         memory_store.id += 1;
         let id = memory_store.id;
 
-        if natural_key.is_some() {
-            memory_store.natural_key_map.insert(natural_key.unwrap().to_string(), id);
+        if let Some(n) = natural_key {
+            memory_store.natural_key_map.insert(n.to_string(), id);
         }
 
         Ok(id)
